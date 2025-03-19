@@ -1,9 +1,7 @@
 "use client";
-import { useEffect } from "react";
-import { use } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { Canvas } from "@/app/components/Canvas";
 import { Toolbar } from "@/app/components/Toolbar";
-import { ComponentsPanel } from "@/app/components/ComponentsPanel";
 import { PropertiesPanel } from "@/app/components/PropertiesPanel";
 import { PagesPanel } from "@/app/components/PagesPanel";
 import { useBuilderStore, Page } from "@/app/lib/store";
@@ -12,10 +10,14 @@ interface DesignResponse {
   pages: Page[];
 }
 
+
+
 export default function Builder({ params }: { params: Promise<{ id: string }> }) {
   const { setPages } = useBuilderStore();
   const resolvedParams = use(params);
   const id = resolvedParams.id;
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [isPanning, setIsPanning] = useState(false);
 
   useEffect(() => {
     fetch(`/api/designs/${id}`)
@@ -24,25 +26,24 @@ export default function Builder({ params }: { params: Promise<{ id: string }> })
         return res.json() as Promise<DesignResponse>;
       })
       .then((data) => {
-        const fetchedPages = data.pages.length ? data.pages : [{ id: "1", title: "Page 1", elements: [] }];
+        const fetchedPages = data.pages.length ? data.pages : [{ id: "1", title: "Page 1", elements: [], backgroundColor: "#ffffff" }];
         setPages(fetchedPages);
       })
       .catch((error) => {
         console.error("Error fetching design:", error);
-        setPages([{ id: "1", title: "Page 1", elements: [] }]);
+        setPages([{ id: "1", title: "Page 1", elements: [], backgroundColor: "#ffffff" }]);
       });
   }, [id, setPages]);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <Toolbar />
-      <div className="flex flex-1 overflow-hidden relative">
+    <div className="flex flex-col h-screen bg-gray-50 font-sans overflow-hidden">
+      <Toolbar canvasRef={canvasRef} setIsPanning={setIsPanning} />
+      <div className="flex flex-1">
         <PagesPanel />
-        <div className="flex-1 relative">
-          <Canvas />
-          <ComponentsPanel /> {/* Floats over the canvas */}
+        <Canvas isPanning={isPanning} />
+        <div className="w-64 shrink-0 bg-gray-100 z-10">
+          <PropertiesPanel />
         </div>
-        <PropertiesPanel />
       </div>
     </div>
   );

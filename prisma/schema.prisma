@@ -16,11 +16,13 @@ model Design {
 }
 
 model Page {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  designId  String   @db.ObjectId
-  design    Design   @relation(fields: [designId], references: [id])
-  title     String
-  elements  Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  designId       String   @db.ObjectId
+  design         Design   @relation(fields: [designId], references: [id])
+  title          String
+  elements       Json
+  backgroundColor String   @default("#ffffff")
+  backgroundImage String?  // New
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
