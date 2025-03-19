@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Design {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  pages     Page[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Page {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  designId  String   @db.ObjectId
+  design    Design   @relation(fields: [designId], references: [id])
+  title     String
+  elements  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
