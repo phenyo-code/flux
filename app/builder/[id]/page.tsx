@@ -1,39 +1,49 @@
 "use client";
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Canvas } from "@/app/components/Canvas";
 import { Toolbar } from "@/app/components/Toolbar";
 import { PropertiesPanel } from "@/app/components/PropertiesPanel";
 import { PagesPanel } from "@/app/components/PagesPanel";
 import { useBuilderStore, Page } from "@/app/lib/store";
+import ObjectID from "bson-objectid";
 
 interface DesignResponse {
   pages: Page[];
+  id: string;
+  title: string;
 }
 
-
-
 export default function Builder({ params }: { params: Promise<{ id: string }> }) {
-  const { setPages } = useBuilderStore();
-  const resolvedParams = use(params);
-  const id = resolvedParams.id;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { setPages, pages } = useBuilderStore();
+  const searchParams = useSearchParams();
+  const template = searchParams.get("template");
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/designs/${id}`)
-      .then((res) => {
+    const fetchDesign = async () => {
+      const resolvedParams = await params; // Await inside async function
+      const id = resolvedParams.id;
+
+      try {
+        const url = template ? `/api/designs/${id}?template=${template}` : `/api/designs/${id}`;
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`Fetch failed with status: ${res.status}`);
-        return res.json() as Promise<DesignResponse>;
-      })
-      .then((data) => {
-        const fetchedPages = data.pages.length ? data.pages : [{ id: "1", title: "Page 1", elements: [], backgroundColor: "#ffffff" }];
+        const data: DesignResponse = await res.json();
+        const fetchedPages = data.pages.length
+          ? data.pages
+          : [{ id: new ObjectID().toHexString(), title: "Page 1", elements: [], backgroundColor: "#ffffff", frameHeight: 800 }];
         setPages(fetchedPages);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error("Error fetching design:", error);
-        setPages([{ id: "1", title: "Page 1", elements: [], backgroundColor: "#ffffff" }]);
-      });
-  }, [id, setPages]);
+        setPages([{ id: new ObjectID().toHexString(), title: "Page 1", elements: [], backgroundColor: "#ffffff", frameHeight: 800 }]);
+      }
+    };
+
+    fetchDesign();
+  }, [params, setPages, template]); // Include params in dependencies
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans overflow-hidden">

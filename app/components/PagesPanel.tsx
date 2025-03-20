@@ -2,26 +2,43 @@
 "use client";
 import { useState } from "react";
 import { useBuilderStore } from "@/app/lib/store";
-import { FaPlus, FaTrash, FaLayerGroup, FaCopy } from "react-icons/fa";
+import {
+  FaPlus, FaTrash, FaLayerGroup, FaCopy, FaTextHeight, FaSquare, FaPlay, FaBars, FaImage, FaBox,
+  FaChevronDown, FaCircle, FaLink, FaClipboard, FaPen, FaHome, FaShoePrints, FaCreditCard, FaImages,
+  FaWindowMaximize, FaFolderOpen, FaVideo, FaMinus, FaChartBar, FaStar, FaTable, FaShareAlt, FaMap
+} from "react-icons/fa";
 
+// Basic HTML-like elements
+const elements = [
+  { type: "text", label: "Text", icon: <FaTextHeight /> },
+  { type: "button", label: "Button", icon: <FaPlay /> },
+  { type: "input", label: "Input", icon: <FaPen /> },
+  { type: "link", label: "Link", icon: <FaLink /> },
+  { type: "radio", label: "Radio Button", icon: <FaCircle /> },
+  { type: "image", label: "Image", icon: <FaImage /> },
+];
+
+// Complex components
 const components = [
-  { type: "pageFrame", label: "Page Frame", icon: "📄" }, // New PageFrame component
-  { type: "text", label: "Text", icon: "T" },
-  { type: "button", label: "Button", icon: "B" },
-  { type: "rectangle", label: "Rectangle", icon: "□" },
-  { type: "nav", label: "Nav Bar", icon: "≡" },
-  { type: "image", label: "Image", icon: "🖼️" },
-  { type: "container", label: "Container", icon: "📦" },
-  { type: "bottomSheet", label: "Bottom Sheet", icon: "⬇️" },
-  { type: "radio", label: "Radio Button", icon: "◉" },
-  { type: "link", label: "Link", icon: "🔗" },
-  { type: "form", label: "Form", icon: "📋" },
-  { type: "input", label: "Input", icon: "✍️" },
-  // New website-relevant components
-  { type: "header", label: "Header", icon: "🏠" },
-  { type: "footer", label: "Footer", icon: "👣" },
-  { type: "card", label: "Card", icon: "🃏" },
-  { type: "carousel", label: "Carousel", icon: "🎠" },
+  { type: "rectangle", label: "Rectangle", icon: <FaSquare /> },
+  { type: "nav", label: "Nav Bar", icon: <FaBars /> },
+  { type: "container", label: "Container", icon: <FaBox /> },
+  { type: "bottomSheet", label: "Bottom Sheet", icon: <FaChevronDown /> },
+  { type: "form", label: "Form", icon: <FaClipboard /> },
+  { type: "header", label: "Header", icon: <FaHome /> },
+  { type: "footer", label: "Footer", icon: <FaShoePrints /> },
+  { type: "card", label: "Card", icon: <FaCreditCard /> },
+  { type: "carousel", label: "Carousel", icon: <FaImages /> },
+  { type: "accordion", label: "Accordion", icon: <FaChevronDown /> },
+  { type: "modal", label: "Modal", icon: <FaWindowMaximize /> },
+  { type: "tabs", label: "Tabs", icon: <FaFolderOpen /> },
+  { type: "video", label: "Video", icon: <FaVideo /> },
+  { type: "divider", label: "Divider", icon: <FaMinus /> },
+  { type: "progress", label: "Progress Bar", icon: <FaChartBar /> },
+  { type: "icon", label: "Icon", icon: <FaStar /> },
+  { type: "table", label: "Table", icon: <FaTable /> },
+  { type: "social", label: "Social Links", icon: <FaShareAlt /> },
+  { type: "map", label: "Map", icon: <FaMap /> },
 ];
 
 export function PagesPanel() {
@@ -31,12 +48,13 @@ export function PagesPanel() {
     setCurrentPageId,
     addPage,
     setSelectedElement,
+    selectedElement,
     renamePage,
     deleteElement,
     duplicateElement,
     groupElements,
   } = useBuilderStore();
-  const [activeTab, setActiveTab] = useState<"pages" | "components">("pages");
+  const [activeTab, setActiveTab] = useState<"pages" | "components" | "elements">("pages");
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,6 +74,9 @@ export function PagesPanel() {
   const filteredComponents = components.filter((comp) =>
     comp.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredElements = elements.filter((el) =>
+    el.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="w-72 bg-gradient-to-b from-gray-100 to-gray-200 p-4 shrink-0 overflow-auto h-[calc(100vh-4rem)] shadow-lg">
@@ -65,6 +86,12 @@ export function PagesPanel() {
           className={`flex-1 p-2 font-medium ${activeTab === "pages" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700 hover:bg-gray-400"} transition-colors`}
         >
           Pages
+        </button>
+        <button
+          onClick={() => setActiveTab("elements")}
+          className={`flex-1 p-2 font-medium ${activeTab === "elements" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700 hover:bg-gray-400"} transition-colors`}
+        >
+          Elements
         </button>
         <button
           onClick={() => setActiveTab("components")}
@@ -141,7 +168,7 @@ export function PagesPanel() {
                         <li
                           key={el.id}
                           onClick={() => setSelectedElement(el)}
-                          className={`text-sm p-1 rounded flex justify-between items-center ${el.isLocked ? "text-gray-400" : "text-gray-700 hover:bg-gray-100 cursor-pointer"}`}
+                          className={`text-sm p-1 rounded flex justify-between items-center ${selectedElement?.id === el.id ? "bg-blue-100 text-blue-800" : el.isLocked ? "text-gray-400" : "text-gray-700 hover:bg-gray-100 cursor-pointer"}`}
                         >
                           <span>
                             {el.type.charAt(0).toUpperCase() + el.type.slice(1)}{" "}
@@ -173,6 +200,30 @@ export function PagesPanel() {
             <FaPlus /> Add Page
           </button>
         </>
+      ) : activeTab === "elements" ? (
+        <>
+          <h2 className="text-lg font-bold mb-4 text-gray-800">Elements</h2>
+          <input
+            type="text"
+            placeholder="Search elements..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-2 mb-4 border rounded-md focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            {filteredElements.map((el) => (
+              <div
+                key={el.type}
+                draggable
+                onDragStart={(e) => handleDragStart(e, el.type)}
+                className="p-2 bg-white rounded-lg shadow-md cursor-grab hover:bg-gray-50 flex items-center gap-2 transition-transform hover:scale-105"
+              >
+                {el.icon}
+                <span>{el.label}</span>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <>
           <h2 className="text-lg font-bold mb-4 text-gray-800">Components</h2>
@@ -191,7 +242,7 @@ export function PagesPanel() {
                 onDragStart={(e) => handleDragStart(e, comp.type)}
                 className="p-2 bg-white rounded-lg shadow-md cursor-grab hover:bg-gray-50 flex items-center gap-2 transition-transform hover:scale-105"
               >
-                <span className="text-lg">{comp.icon}</span>
+                {comp.icon}
                 <span>{comp.label}</span>
               </div>
             ))}

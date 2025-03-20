@@ -15,21 +15,46 @@ export type Element = {
     | "link"
     | "form"
     | "input"
-    | "pageFrame" // New
-    | "header" // New
-    | "footer" // New
-    | "card" // New
-    | "carousel"; // New
+    | "pageFrame"
+    | "header"
+    | "footer"
+    | "card"
+    | "carousel"
+    // New component types
+    | "accordion"
+    | "modal"
+    | "tabs"
+    | "video"
+    | "divider"
+    | "progress"
+    | "icon"
+    | "table"
+    | "social"
+    | "map";
   x: number;
   y: number;
   width: number;
   height: number;
   content?: string;
-  style?: React.CSSProperties & { zIndex?: number };
+  style?: React.CSSProperties & {
+    zIndex?: number;
+    // New typography properties
+    fontFamily?: string;
+    fontWeight?: string;
+    textAlign?: "left" | "center" | "right" | "justify";
+    lineHeight?: string;
+    letterSpacing?: string;
+    fontStyle?: "normal" | "italic";
+    textDecoration?: "none" | "underline";
+    // New designer tweaks
+    transform?: string; // For rotation
+    mixBlendMode?: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "color-dodge" | "color-burn";
+    cursor?: "auto" | "pointer" | "default" | "crosshair" | "move" | "text" | "wait";
+  };
   actions?: { event: string; action: string; value?: string }[];
   parentId?: number;
   isLocked?: boolean;
-  zIndex?: number;
+  zIndex?: number; // Legacy support, prefer style.zIndex
 };
 
 export interface Page {
@@ -38,8 +63,8 @@ export interface Page {
   elements: Element[];
   backgroundColor?: string;
   backgroundImage?: string;
-  frameHeight?: number; // New: Store frame height per page
-  columnCount?: number; 
+  frameHeight?: number;
+  columnCount?: number;
   gridSize?: number;
 }
 
@@ -51,8 +76,10 @@ interface BuilderState {
   historyIndex: number;
   zoom: number;
   showGrid: boolean;
-  gridSize: number; // New: Grid size for snapping and display
-  columnCount: number; // New: Number of columns for "columns" mode
+  gridSize: number;
+  columnCount: number;
+  layoutMode: "grid" | "columns";
+  previewMode: boolean;
   setPages: (pages: Page[]) => void;
   setCurrentPageId: (pageId: string) => void;
   setSelectedElement: (element: Element | null) => void;
@@ -69,10 +96,14 @@ interface BuilderState {
   ungroupElements: (pageId: string, containerId: number) => void;
   setZoom: (zoom: number) => void;
   toggleGrid: () => void;
-  setFrameHeight: (pageId: string, height: number) => void; // Updated: Set frame height for specific page
-  setGridSize: (size: number) => void; // Updated: Set grid size globally
-  setColumnCount: (count: number) => void; // Updated: Set column count globally
+  setFrameHeight: (pageId: string, height: number) => void;
+  setGridSize: (size: number) => void;
+  setColumnCount: (count: number) => void;
   alignElements: (pageId: string, elementIds: number[], alignment: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
+  setLayoutMode: (mode: "grid" | "columns") => void;
+  setPreviewMode: (mode: boolean) => void;
+  gutter: number; // Default gutter size in pixels
+  setGutter: (gutter: number) => void;
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -83,8 +114,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   historyIndex: -1,
   zoom: 1,
   showGrid: true,
-  gridSize: 10, // Default grid size
-  columnCount: 12, // Default column count
+  gridSize: 10,
+  columnCount: 12,
+  layoutMode: "grid",
+  previewMode: false,
+  gutter: 10, // Default gutter size in pixels
+  setGutter: (gutter: number) => set({ gutter }),
 
   setPages: (pages) =>
     set((state) => {
@@ -108,7 +143,9 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
           ? {
               ...page,
               elements: page.elements.some((el) => el.id === id)
-                ? page.elements.map((el) => (el.id === id ? { ...el, ...updates } : el))
+                ? page.elements.map((el) =>
+                    el.id === id ? { ...el, ...updates, style: { ...el.style, ...updates.style } } : el
+                  )
                 : [...page.elements, { id, ...updates } as Element],
             }
           : page
@@ -119,7 +156,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   addPage: (title) =>
     set((state) => {
-      const newPage = { id: Date.now().toString(), title, elements: [], backgroundColor: "#ffffff", frameHeight: 800 }; // Default frame height
+      const newPage = { id: Date.now().toString(), title, elements: [], backgroundColor: "#ffffff", frameHeight: 800 };
       const newPages = [...state.pages, newPage];
       const newHistory = [...state.history.slice(0, state.historyIndex + 1), newPages];
       return {
@@ -297,16 +334,16 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       return { pages: newPages, history: newHistory, historyIndex: newHistory.length - 1 };
     }),
 
-  setGridSize: (size) => set({ gridSize: Math.max(1, size) }), // Minimum grid size of 1px
+  setGridSize: (size) => set({ gridSize: Math.max(1, size) }),
 
-  setColumnCount: (count) => set({ columnCount: Math.max(1, Math.min(24, count)) }), // Limit columns between 1 and 24
+  setColumnCount: (count) => set({ columnCount: Math.max(1, Math.min(24, count)) }),
 
   alignElements: (pageId, elementIds, alignment) =>
     set((state) => {
       const page = state.pages.find((p) => p.id === pageId);
       if (!page) return state;
       const elementsToAlign = page.elements.filter((el) => elementIds.includes(el.id));
-      if (elementsToAlign.length < 2) return state;
+      if (elementsToAlign.length === 0) return state; // Changed to allow single-element alignment
 
       let newElements = [...page.elements];
       if (alignment === "left") {
@@ -345,4 +382,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       const newHistory = [...state.history.slice(0, state.historyIndex + 1), newPages];
       return { pages: newPages, history: newHistory, historyIndex: newHistory.length - 1 };
     }),
+
+  setLayoutMode: (mode) => set({ layoutMode: mode }),
+
+  setPreviewMode: (mode) => set({ previewMode: mode }),
 }));
