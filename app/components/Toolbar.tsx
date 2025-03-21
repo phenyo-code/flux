@@ -1,15 +1,40 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useBuilderStore } from "@/app/lib/store";
-import { FaSave, FaUndo, FaRedo, FaRuler, FaDownload, FaShareAlt, FaSearchPlus, FaSearchMinus, FaHandPaper, FaEye } from "react-icons/fa";
+import {
+  FaSave,
+  FaUndo,
+  FaRedo,
+  FaRuler,
+  FaDownload,
+  FaShareAlt,
+  FaSearchPlus,
+  FaSearchMinus,
+  FaHandPaper,
+  FaEye,
+  FaPlay,
+} from "react-icons/fa";
 import { saveDesignOrTemplate } from "@/app/actions/saveTemplate";
 import { useRouter } from "next/navigation";
 
-export function Toolbar({ canvasRef, setIsPanning }: { 
+export function Toolbar({
+  canvasRef,
+  setIsPanning,
+}: {
   canvasRef: React.RefObject<HTMLDivElement | null>;
-  setIsPanning: (value: boolean) => void; 
+  setIsPanning: (value: boolean) => void;
 }) {
-  const { pages, undo, redo, setZoom, zoom, toggleGrid, showGrid } = useBuilderStore();
+  const {
+    pages,
+    undo,
+    redo,
+    setZoom,
+    zoom,
+    toggleGrid,
+    showGrid,
+    previewMode,
+    setPreviewMode,
+  } = useBuilderStore();
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [isPanningLocal, setIsPanningLocal] = useState(false);
@@ -31,10 +56,10 @@ export function Toolbar({ canvasRef, setIsPanning }: {
 
     const result = await saveDesignOrTemplate({
       pages,
-      title: dName || "My Design", // Used for design title
-      name: saveAs === "template" ? (tName || `template-${Date.now()}`) : undefined, // Only for templates
+      title: dName || "My Design",
+      name: saveAs === "template" ? (tName || `template-${Date.now()}`) : undefined,
       saveAs,
-      designId: designId !== "newproject" && designId !== "demo" ? designId : undefined, // Only update if valid ID
+      designId: designId !== "newproject" && designId !== "demo" ? designId : undefined,
     });
 
     if (!result.success) {
@@ -43,7 +68,11 @@ export function Toolbar({ canvasRef, setIsPanning }: {
       return;
     }
 
-    alert(`${saveAs.charAt(0).toUpperCase() + saveAs.slice(1)} saved as: ${saveAs === "design" ? (dName || "My Design") : (tName || `template-${Date.now()}`)}`);
+    alert(
+      `${saveAs.charAt(0).toUpperCase() + saveAs.slice(1)} saved as: ${
+        saveAs === "design" ? dName || "My Design" : tName || `template-${Date.now()}`
+      }`
+    );
     if (saveAs === "design" && !designId && result.data) {
       router.push(`/builder/${result.data.id}`);
     }
@@ -90,6 +119,10 @@ export function Toolbar({ canvasRef, setIsPanning }: {
 
   const togglePanMode = () => {
     setIsPanningLocal((prev) => !prev);
+  };
+
+  const togglePreviewMode = () => {
+    setPreviewMode(!previewMode);
   };
 
   const isSaveButtonVisible = () => {
@@ -189,6 +222,13 @@ export function Toolbar({ canvasRef, setIsPanning }: {
         </button>
         <button onClick={handleFitToScreen} className="p-2 hover:bg-gray-600 rounded transition-colors" title="Fit to Screen">
           <FaEye />
+        </button>
+        <button
+          onClick={togglePreviewMode}
+          className={`p-2 ${previewMode ? "bg-blue-600" : "hover:bg-gray-600"} rounded transition-colors`}
+          title={previewMode ? "Switch to Design Mode" : "Switch to Preview Mode"}
+        >
+          <FaPlay /> {previewMode ? "Design" : "Preview"}
         </button>
         <div className="flex gap-2">
           <input

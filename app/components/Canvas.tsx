@@ -27,6 +27,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     setFrameHeight,
     layoutMode,
     previewMode,
+    handlePrototypeAction,
   } = useBuilderStore();
   const currentPage = pages.find((p) => p.id === currentPageId) || {
     id: "default",
@@ -516,7 +517,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       opacity: el.isLocked ? 0.6 : normalizedStyle.opacity ?? 1,
       transform: normalizedStyle.transform,
       mixBlendMode: normalizedStyle.mixBlendMode || "normal",
-      cursor: normalizedStyle.cursor || (el.isLocked || previewMode ? "default" : "move"),
+      cursor: previewMode && el.prototype?.onClick ? "pointer" : normalizedStyle.cursor || (el.isLocked || previewMode ? "default" : "move"),
       boxShadow: normalizedStyle.boxShadow,
     };
 
@@ -549,12 +550,24 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     return (
       <div
         key={el.id}
+        id={`element-${el.id}`} // Added ID for scrollTo targeting
         style={baseStyle}
         draggable={!isEditable && !el.isLocked && !isPanning && !previewMode}
         onDragStart={(e) => {
           e.dataTransfer.setData("id", el.id.toString());
         }}
         onMouseDown={(e) => handleMouseDown(e, el)}
+        onClick={(e) => {
+          if (previewMode && el.prototype?.onClick) {
+            e.stopPropagation();
+            handlePrototypeAction("onClick", el);
+          }
+        }}
+        onMouseEnter={() => {
+          if (previewMode && el.prototype?.onHover) {
+            handlePrototypeAction("onHover", el);
+          }
+        }}
         onDoubleClick={() => !el.isLocked && isEditable && setSelectedElement(el)}
         onContextMenu={(e) => handleContextMenu(e, el)}
         className={`relative group`}
@@ -814,6 +827,17 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       </div>
     );
   };
+
+  // Trigger onLoad prototype actions when page loads in preview mode
+  useEffect(() => {
+    if (previewMode && currentPageId) {
+      currentPage.elements.forEach((el) => {
+        if (el.prototype?.onLoad) {
+          handlePrototypeAction("onLoad", el);
+        }
+      });
+    }
+  }, [previewMode, currentPageId, currentPage.elements, handlePrototypeAction]);
 
   return (
     <div

@@ -20,7 +20,6 @@ export type Element = {
     | "footer"
     | "card"
     | "carousel"
-    // New component types
     | "accordion"
     | "modal"
     | "tabs"
@@ -38,7 +37,6 @@ export type Element = {
   content?: string;
   style?: React.CSSProperties & {
     zIndex?: number;
-    // New typography properties
     fontFamily?: string;
     fontWeight?: string;
     textAlign?: "left" | "center" | "right" | "justify";
@@ -46,15 +44,39 @@ export type Element = {
     letterSpacing?: string;
     fontStyle?: "normal" | "italic";
     textDecoration?: "none" | "underline";
-    // New designer tweaks
-    transform?: string; // For rotation
+    transform?: string;
     mixBlendMode?: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "color-dodge" | "color-burn";
     cursor?: "auto" | "pointer" | "default" | "crosshair" | "move" | "text" | "wait";
   };
-  actions?: { event: string; action: string; value?: string }[];
+  prototype?: {
+    onClick?: {
+      action:
+        | "navigate"           // Go to another page
+        | "openModal"          // Show a modal (assuming a modal element exists)
+        | "toggleVisibility"   // Show/hide another element
+        | "playVideo"          // Play a video element
+        | "submitForm"         // Submit a form element
+        | "openLink"           // Open an external URL
+        | "scrollTo"           // Scroll to an element or position
+        | "triggerAnimation";  // Trigger a predefined animation
+      targetId?: string;       // Page ID, element ID, or other target
+      value?: string;          // URL, animation name, or other data
+      delay?: number;          // Delay in milliseconds
+      transition?: "none" | "fade" | "slide" | "zoom"; // Transition effect
+    };
+    onHover?: {
+      action: "showTooltip" | "highlight" | "scale"; // Hover interactions
+      targetId?: string;
+      value?: string; // Tooltip text or scale factor
+    };
+    onLoad?: {
+      action: "animate" | "fetchData"; // Actions on page load
+      value?: string; // Animation name or API endpoint
+    };
+  };
   parentId?: number;
   isLocked?: boolean;
-  zIndex?: number; // Legacy support, prefer style.zIndex
+  zIndex?: number;
 };
 
 export interface Page {
@@ -80,6 +102,7 @@ interface BuilderState {
   columnCount: number;
   layoutMode: "grid" | "columns";
   previewMode: boolean;
+  gutter: number;
   setPages: (pages: Page[]) => void;
   setCurrentPageId: (pageId: string) => void;
   setSelectedElement: (element: Element | null) => void;
@@ -99,11 +122,15 @@ interface BuilderState {
   setFrameHeight: (pageId: string, height: number) => void;
   setGridSize: (size: number) => void;
   setColumnCount: (count: number) => void;
-  alignElements: (pageId: string, elementIds: number[], alignment: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
+  alignElements: (
+    pageId: string,
+    elementIds: number[],
+    alignment: "left" | "center" | "right" | "top" | "middle" | "bottom"
+  ) => void;
   setLayoutMode: (mode: "grid" | "columns") => void;
   setPreviewMode: (mode: boolean) => void;
-  gutter: number; // Default gutter size in pixels
   setGutter: (gutter: number) => void;
+  handlePrototypeAction: (event: "onClick" | "onHover" | "onLoad", element: Element) => void;
 }
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
@@ -118,8 +145,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   columnCount: 12,
   layoutMode: "grid",
   previewMode: false,
-  gutter: 10, // Default gutter size in pixels
-  setGutter: (gutter: number) => set({ gutter }),
+  gutter: 10,
 
   setPages: (pages) =>
     set((state) => {
@@ -343,7 +369,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       const page = state.pages.find((p) => p.id === pageId);
       if (!page) return state;
       const elementsToAlign = page.elements.filter((el) => elementIds.includes(el.id));
-      if (elementsToAlign.length === 0) return state; // Changed to allow single-element alignment
+      if (elementsToAlign.length === 0) return state;
 
       let newElements = [...page.elements];
       if (alignment === "left") {
@@ -386,4 +412,128 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setLayoutMode: (mode) => set({ layoutMode: mode }),
 
   setPreviewMode: (mode) => set({ previewMode: mode }),
+
+  setGutter: (gutter) => set({ gutter }),
+
+  handlePrototypeAction: (event, element) => {
+    const proto = element.prototype?.[event];
+    if (!proto || !get().previewMode) return;
+
+    const applyDelay = (callback: () => void) => {
+      if ("delay" in proto && proto.delay) {
+        setTimeout(callback, proto.delay);
+      } else {
+        callback();
+      }
+    };
+
+    switch (event) {
+      case "onClick":
+        switch (proto.action) {
+          case "navigate":
+            applyDelay(() => {
+              if (proto.targetId) set({ currentPageId: proto.targetId });
+            });
+            break;
+          case "openModal":
+            applyDelay(() => {
+              console.log(`Open modal: ${proto.targetId}`);
+              // TODO: Implement modal visibility toggle (requires modal state)
+            });
+            break;
+          case "toggleVisibility":
+            applyDelay(() => {
+              set((state) => {
+                const page = state.pages.find((p) => p.id === state.currentPageId);
+                if (!page || !proto.targetId) return state;
+                const target = page.elements.find((el) => el.id === Number(proto.targetId));
+                if (!target) return state;
+                return {
+                  pages: state.pages.map((p) =>
+                    p.id === state.currentPageId
+                      ? {
+                          ...p,
+                          elements: p.elements.map((el) =>
+                            el.id === Number(proto.targetId)
+                              ? {
+                                  ...el,
+                                  style: {
+                                    ...el.style,
+                                    display: el.style?.display === "none" ? "block" : "none",
+                                  },
+                                }
+                              : el
+                          ),
+                        }
+                      : p
+                  ),
+                };
+              });
+            });
+            break;
+          case "playVideo":
+            applyDelay(() => {
+              console.log(`Play video: ${proto.targetId}`);
+              // TODO: Implement video playback (requires video ref or state)
+            });
+            break;
+          case "submitForm":
+            applyDelay(() => {
+              console.log(`Submit form: ${proto.targetId}`);
+              // TODO: Implement form submission (requires form handling)
+            });
+            break;
+          case "openLink":
+            applyDelay(() => {
+              if (proto.value) window.open(proto.value, "_blank");
+            });
+            break;
+          case "scrollTo":
+            applyDelay(() => {
+              if (proto.targetId) {
+                const el = document.getElementById(`element-${proto.targetId}`);
+                if (el) el.scrollIntoView({ behavior: proto.transition === "none" ? "auto" : "smooth" });
+              }
+            });
+            break;
+          case "triggerAnimation":
+            applyDelay(() => {
+              console.log(`Trigger animation: ${proto.value}`);
+              // TODO: Implement animation (requires animation library or CSS)
+            });
+            break;
+        }
+        break;
+
+      case "onHover":
+        switch (proto.action) {
+          case "showTooltip":
+            console.log(`Show tooltip: ${proto.value}`);
+            // TODO: Implement tooltip UI
+            break;
+          case "highlight":
+            console.log(`Highlight: ${proto.targetId}`);
+            // TODO: Implement highlight effect (e.g., border or background change)
+            break;
+          case "scale":
+            console.log(`Scale: ${proto.value}`);
+            // TODO: Implement scaling (requires dynamic style update)
+            break;
+        }
+        break;
+
+      case "onLoad":
+        switch (proto.action) {
+          case "animate":
+            console.log(`Animate on load: ${proto.value}`);
+            // TODO: Implement load animation
+            break;
+          case "fetchData":
+            console.log(`Fetch data: ${proto.value}`);
+            // TODO: Implement data fetching
+            break;
+        }
+        break;
+    }
+  },
 }));
