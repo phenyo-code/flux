@@ -111,6 +111,7 @@ export function Toolbar({
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleScrollTo = () => {
     if (canvasRef.current) {
       canvasRef.current.scrollTo({ top: scrollY, left: scrollX, behavior: "smooth" });
@@ -228,26 +229,9 @@ export function Toolbar({
           className={`p-2 ${previewMode ? "bg-blue-600" : "hover:bg-gray-600"} rounded transition-colors`}
           title={previewMode ? "Switch to Design Mode" : "Switch to Preview Mode"}
         >
-          <FaPlay /> {previewMode ? "Design" : "Preview"}
+          <FaPlay /> {previewMode ? "" : ""}
         </button>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={scrollX}
-            onChange={(e) => setScrollX(Number(e.target.value))}
-            onKeyPress={(e) => e.key === "Enter" && handleScrollTo()}
-            placeholder="X"
-            className="w-16 p-1 text-black rounded bg-gray-200 focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="number"
-            value={scrollY}
-            onChange={(e) => setScrollY(Number(e.target.value))}
-            onKeyPress={(e) => e.key === "Enter" && handleScrollTo()}
-            placeholder="Y"
-            className="w-16 p-1 text-black rounded bg-gray-200 focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+        
         <button onClick={handleExport} className="p-2 hover:bg-gray-600 rounded transition-colors" title="Export Design">
           <FaDownload />
         </button>

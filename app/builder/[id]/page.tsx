@@ -1,4 +1,3 @@
-// app/builder/[id]/page.tsx
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -18,7 +17,7 @@ interface DesignResponse {
 
 export default function Builder({ params }: { params: Promise<{ id: string }> }) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { setPages, pages } = useBuilderStore();
+  const { setPages, pages, previewMode } = useBuilderStore(); // Added previewMode from store
   const searchParams = useSearchParams();
   const template = searchParams.get("template");
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -52,31 +51,38 @@ export default function Builder({ params }: { params: Promise<{ id: string }> })
     <div className="flex flex-col h-screen bg-gray-50 font-sans overflow-hidden">
       <Toolbar canvasRef={canvasRef} setIsPanning={setIsPanning} />
       <div className="flex flex-1">
-        <PagesPanel />
+        {/* Show PagesPanel only when not in previewMode */}
+        {!previewMode && <PagesPanel />}
+        
+        {/* Canvas always visible, takes full width in previewMode */}
         <Canvas isPanning={isPanning} />
-        <div className="w-64 shrink-0 bg-gray-100 z-10 flex flex-col">
-          <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab("properties")}
-              className={`flex-1 p-2 text-sm font-medium ${
-                activeTab === "properties" ? "bg-white border-b-2 border-blue-500 text-blue-600" : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              Properties
-            </button>
-            <button
-              onClick={() => setActiveTab("prototype")}
-              className={`flex-1 p-2 text-sm font-medium ${
-                activeTab === "prototype" ? "bg-white border-b-2 border-blue-500 text-blue-600" : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              Prototype
-            </button>
+
+        {/* Show Properties/Prototype panel only when not in previewMode */}
+        {!previewMode && (
+          <div className="w-64 shrink-0 bg-gray-100 z-10 flex flex-col">
+            <div className="flex border-b">
+              <button
+                onClick={() => setActiveTab("properties")}
+                className={`flex-1 p-2 text-sm font-medium ${
+                  activeTab === "properties" ? "bg-white border-b-2 border-blue-500 text-blue-600" : "bg-gray-200 text-gray-700"
+                }`}
+              >
+                Properties
+              </button>
+              <button
+                onClick={() => setActiveTab("prototype")}
+                className={`flex-1 p-2 text-sm font-medium ${
+                  activeTab === "prototype" ? "bg-white border-b-2 border-blue-500 text-blue-600" : "bg-gray-200 text-gray-700"
+                }`}
+              >
+                Prototype
+              </button>
+            </div>
+            <div className="flex-1">
+              {activeTab === "properties" ? <PropertiesPanel /> : <PrototypePanel />}
+            </div>
           </div>
-          <div className="flex-1">
-            {activeTab === "properties" ? <PropertiesPanel /> : <PrototypePanel />}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

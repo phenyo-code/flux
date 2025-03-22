@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @next/next/no-img-element */
 "use client";
@@ -51,6 +52,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: Element } | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string; elementId: number } | null>(null); // New for onHover tooltips
   const canvasRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -174,6 +176,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               : type === "input"
               ? "1px solid #d1d5db"
               : undefined,
+          display: type === "modal" ? "none" : undefined, // Modals start hidden
         },
       };
       const clamped = clampToFrame(newElement.x, newElement.y, newElement.width, newElement.height);
@@ -199,7 +202,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       centerY: y + height / 2,
     };
 
-    // Frame Alignment Guides
     if (Math.abs(checkPoints.centerX - frameCenterX) < snapThreshold)
       newGuides.push({ id: "center-x", x: frameCenterX, type: "center-x" });
     if (Math.abs(checkPoints.centerY - frameCenterY) < snapThreshold)
@@ -211,7 +213,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     if (Math.abs(checkPoints.bottom - frameHeight) < snapThreshold)
       newGuides.push({ id: "bottom-edge", y: frameHeight, type: "edge-y" });
 
-    // Element Alignment and Spacing Guides
     const elements = currentPage.elements.filter((el) => !draggedIds.includes(el.id));
     const spacingThreshold = 4;
 
@@ -225,7 +226,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
         centerY: el.y + el.height / 2,
       };
 
-      // Alignment Guides
       ["left", "right", "centerX"].forEach((key) => {
         const pos = bounds[key as keyof typeof bounds];
         const checkPos = checkPoints[key as keyof typeof checkPoints];
@@ -241,7 +241,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
         }
       });
 
-      // Spacing Guides (Outside Elements)
       if (x > bounds.right && x < FRAME_WIDTH) {
         const distance = x - bounds.right;
         if (distance < 100) {
@@ -267,8 +266,13 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
         }
       }
 
-      // Inside Container Spacing (if dragged element is inside a container)
-      if (el.type === "container" && checkPoints.left >= bounds.left && checkPoints.right <= bounds.right && checkPoints.top >= bounds.top && checkPoints.bottom <= bounds.bottom) {
+      if (
+        el.type === "container" &&
+        checkPoints.left >= bounds.left &&
+        checkPoints.right <= bounds.right &&
+        checkPoints.top >= bounds.top &&
+        checkPoints.bottom <= bounds.bottom
+      ) {
         const insideLeft = checkPoints.left - bounds.left;
         const insideRight = bounds.right - checkPoints.right;
         const insideTop = checkPoints.top - bounds.top;
@@ -455,7 +459,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
         animationFrameRef.current = requestAnimationFrame(moveElement);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentPageId, resizing, dragging, panning, isPanning, currentPage.elements, updateElement, selectedIds, zoom, selectionBox, guides, previewMode]
   );
 
@@ -473,8 +476,8 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     if (el.isLocked || previewMode) return;
     const rect = frameRef.current!.getBoundingClientRect();
     setContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, element: el });
-    setSelectedElement(el); // Ensure the clicked element is selected
-    setSelectedIds([el.id]); // Ensure only this element is selected for single-click context
+    setSelectedElement(el);
+    setSelectedIds([el.id]);
   };
 
   const closeContextMenu = () => setContextMenu(null);
@@ -506,8 +509,8 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       delete normalizedStyle.background;
     }
 
-    const baseStyle = {
-      position: "absolute" as const,
+    const baseStyle: React.CSSProperties = {
+      position: "absolute",
       left: el.x,
       top: el.y,
       width: el.width,
@@ -519,6 +522,9 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       mixBlendMode: normalizedStyle.mixBlendMode || "normal",
       cursor: previewMode && el.prototype?.onClick ? "pointer" : normalizedStyle.cursor || (el.isLocked || previewMode ? "default" : "move"),
       boxShadow: normalizedStyle.boxShadow,
+      display: normalizedStyle.display || "block", // Respect display from prototype actions
+      transition: normalizedStyle.transition, // Respect transitions from prototype
+      animation: normalizedStyle.animation, // Respect animations from prototype
     };
 
     const contentStyle = {
@@ -550,7 +556,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     return (
       <div
         key={el.id}
-        id={`element-${el.id}`} // Added ID for scrollTo targeting
+        id={`element-${el.id}`}
         style={baseStyle}
         draggable={!isEditable && !el.isLocked && !isPanning && !previewMode}
         onDragStart={(e) => {
@@ -563,9 +569,18 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             handlePrototypeAction("onClick", el);
           }
         }}
-        onMouseEnter={() => {
+        onMouseEnter={(e) => {
           if (previewMode && el.prototype?.onHover) {
             handlePrototypeAction("onHover", el);
+            if (el.prototype.onHover.action === "showTooltip" && el.prototype.onHover.value) {
+              const rect = frameRef.current!.getBoundingClientRect();
+              setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, text: el.prototype.onHover.value, elementId: el.id });
+            }
+          }
+        }}
+        onMouseLeave={() => {
+          if (previewMode && el.prototype?.onHover?.action === "showTooltip") {
+            setTooltip(null);
           }
         }}
         onDoubleClick={() => !el.isLocked && isEditable && setSelectedElement(el)}
@@ -577,7 +592,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             <textarea
               value={el.content || ""}
               onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
-              onBlur={() => setSelectedElement(el)} // Keep selection on blur
+              onBlur={() => setSelectedElement(el)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   setSelectedElement(null);
@@ -593,7 +608,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               type="text"
               value={el.content || ""}
               onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
-              onBlur={() => setSelectedElement(el)} // Keep selection on blur
+              onBlur={() => setSelectedElement(el)}
               onKeyPress={(e) => e.key === "Enter" && setSelectedElement(el)}
               className="w-full h-full px-2 py-1 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
               style={contentStyle}
@@ -651,9 +666,12 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               </a>
             )}
             {el.type === "form" && (
-              <div className="w-full h-full p-2" style={contentStyle}>
-                {el.content || "Form Container"}
-              </div>
+              <form id={`element-${el.id}`} className="w-full h-full p-2" style={contentStyle}>
+                <input type="text" placeholder={el.content || "Form Input"} className="w-full p-2 border rounded" />
+                <button type="submit" className="mt-2 px-3 py-1 bg-blue-600 text-white rounded">
+                  Submit
+                </button>
+              </form>
             )}
             {el.type === "input" && (
               <input
@@ -661,7 +679,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
                 placeholder={el.content || "Input"}
                 className="w-full h-full p-2 focus:outline-none focus:border-blue-500"
                 style={contentStyle}
-                readOnly
+                readOnly={previewMode}
               />
             )}
             {el.type === "header" && (
@@ -707,7 +725,10 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               <div className="w-full h-full p-3 flex flex-col" style={contentStyle}>
                 <div>{el.content || "Modal Title"}</div>
                 <div className="mt-1 flex-1 opacity-70">Content</div>
-                <button className="self-end mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                <button
+                  className="self-end mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  onClick={() => updateElement(currentPageId!, el.id, { style: { ...el.style, display: "none" } })}
+                >
                   Close
                 </button>
               </div>
@@ -726,6 +747,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             )}
             {el.type === "video" && (
               <video
+                id={`element-${el.id}`}
                 src={el.content || "https://www.w3schools.com/html/mov_bbb.mp4"}
                 controls
                 className="w-full h-full object-cover"
@@ -795,11 +817,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
                 allowFullScreen
               />
             )}
-            {[
-              "container", "button", "rectangle", "text",
-              "image", "form", "header", "footer", "card", "carousel", "modal", "tabs", "video", "table", "map",
-              "nav", "accordion", "input", "social", "progress"
-            ].includes(el.type) && !el.isLocked && !previewMode && (
+            {["container", "button", "rectangle", "text", "image", "form", "header", "footer", "card", "carousel", "modal", "tabs", "video", "table", "map", "nav", "accordion", "input", "social", "progress"].includes(el.type) && !el.isLocked && !previewMode && (
               <div className="absolute inset-0 pointer-events-none group-hover:pointer-events-auto">
                 <div
                   className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-transparent hover:bg-blue-200/50"
@@ -828,7 +846,6 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     );
   };
 
-  // Trigger onLoad prototype actions when page loads in preview mode
   useEffect(() => {
     if (previewMode && currentPageId) {
       currentPage.elements.forEach((el) => {
@@ -839,12 +856,13 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     }
   }, [previewMode, currentPageId, currentPage.elements, handlePrototypeAction]);
 
+  // Reset tooltip when page changes
+  useEffect(() => {
+    setTooltip(null);
+  }, [currentPageId]);
+
   return (
-    <div
-      ref={canvasRef}
-      className="flex-1 relative bg-gray-100 overflow-auto"
-      style={{ height: "100vh" }}
-    >
+    <div ref={canvasRef} className="flex-1 relative bg-gray-100 overflow-auto" style={{ height: "100vh" }}>
       {!currentPageId ? (
         <div className="absolute inset-0 flex items-center justify-center text-gray-500">Select or create a page to start</div>
       ) : (
@@ -934,10 +952,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               ))}
             {currentPage.elements.map((el) => renderElement(el))}
             {!previewMode && (
-              <div
-                className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200/50"
-                onMouseDown={handleFrameResize}
-              />
+              <div className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200/50" onMouseDown={handleFrameResize} />
             )}
             {!previewMode && selectionBox && (
               <div
@@ -1044,6 +1059,14 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
                     Ungroup
                   </button>
                 )}
+              </div>
+            )}
+            {tooltip && previewMode && (
+              <div
+                className="absolute bg-gray-800 text-white text-sm px-2 py-1 rounded shadow-lg z-50"
+                style={{ left: tooltip.x / zoom + 10, top: tooltip.y / zoom + 10 }}
+              >
+                {tooltip.text}
               </div>
             )}
           </div>

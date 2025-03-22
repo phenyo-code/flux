@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 // app/components/PrototypePanel.tsx
 "use client";
 import { useBuilderStore } from "@/app/lib/store";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { FaMousePointer, FaEye, FaPlay, FaExternalLinkAlt, FaVideo, FaBars, FaArrowDown, FaMagic } from "react-icons/fa";
 
 export function PrototypePanel() {
@@ -20,11 +20,19 @@ export function PrototypePanel() {
   const currentPage = pages.find((p) => p.id === currentPageId);
   const elements = currentPage?.elements || [];
 
-  const updatePrototype = (event: "onClick" | "onHover" | "onLoad", updates: any) => {
+  const updatePrototype = (
+    event: "onClick" | "onHover" | "onLoad",
+    updates: { action?: string; targetId?: string; value?: string; delay?: number; transition?: string } | undefined
+  ) => {
     updateElement(currentPageId!, selectedElement.id, {
       prototype: {
         ...selectedElement.prototype,
-        [event]: updates ? { ...selectedElement.prototype?.[event], ...updates } : undefined,
+        [event]: updates
+          ? {
+              ...selectedElement.prototype?.[event], // Preserve existing properties
+              ...updates,
+            }
+          : undefined,
       },
     });
   };
@@ -41,8 +49,8 @@ export function PrototypePanel() {
           <select
             value={selectedElement.prototype?.onClick?.action || ""}
             onChange={(e) => {
-              const action = e.target.value as any;
-              updatePrototype("onClick", action ? { action, targetId: "", value: "", delay: 0, transition: "none" } : undefined);
+              const action = e.target.value;
+              updatePrototype("onClick", action ? { action } : undefined); // Don’t reset targetId
             }}
             className="w-full p-2 border rounded bg-white focus:ring-2 focus:ring-blue-500"
           >
@@ -76,7 +84,7 @@ export function PrototypePanel() {
                         </option>
                       ))
                     : elements.map((el) => (
-                        <option key={el.id} value={el.id}>
+                        <option key={el.id} value={el.id.toString()}>
                           {el.type} {el.content ? `(${el.content.slice(0, 10)}...)` : ""}
                         </option>
                       ))}
@@ -102,7 +110,7 @@ export function PrototypePanel() {
                 />
                 <select
                   value={selectedElement.prototype.onClick.transition || "none"}
-                  onChange={(e) => updatePrototype("onClick", { transition: e.target.value as any })}
+                  onChange={(e) => updatePrototype("onClick", { transition: e.target.value })}
                   className="w-1/2 p-2 border rounded bg-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="none">No Transition</option>
@@ -123,8 +131,8 @@ export function PrototypePanel() {
           <select
             value={selectedElement.prototype?.onHover?.action || ""}
             onChange={(e) => {
-              const action = e.target.value as any;
-              updatePrototype("onHover", action ? { action, targetId: "", value: "" } : undefined);
+              const action = e.target.value;
+              updatePrototype("onHover", action ? { action } : undefined);
             }}
             className="w-full p-2 border rounded bg-white focus:ring-2 focus:ring-blue-500"
           >
@@ -143,7 +151,7 @@ export function PrototypePanel() {
                 >
                   <option value="">Select Element</option>
                   {elements.map((el) => (
-                    <option key={el.id} value={el.id}>
+                    <option key={el.id} value={el.id.toString()}>
                       {el.type} {el.content ? `(${el.content.slice(0, 10)}...)` : ""}
                     </option>
                   ))}
@@ -171,8 +179,8 @@ export function PrototypePanel() {
           <select
             value={selectedElement.prototype?.onLoad?.action || ""}
             onChange={(e) => {
-              const action = e.target.value as any;
-              updatePrototype("onLoad", action ? { action, value: "" } : undefined);
+              const action = e.target.value;
+              updatePrototype("onLoad", action ? { action } : undefined);
             }}
             className="w-full p-2 border rounded bg-white focus:ring-2 focus:ring-blue-500"
           >

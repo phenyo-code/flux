@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
 import { create } from "zustand";
 
 export type Element = {
@@ -51,27 +51,27 @@ export type Element = {
   prototype?: {
     onClick?: {
       action:
-        | "navigate"           // Go to another page
-        | "openModal"          // Show a modal (assuming a modal element exists)
-        | "toggleVisibility"   // Show/hide another element
-        | "playVideo"          // Play a video element
-        | "submitForm"         // Submit a form element
-        | "openLink"           // Open an external URL
-        | "scrollTo"           // Scroll to an element or position
-        | "triggerAnimation";  // Trigger a predefined animation
-      targetId?: string;       // Page ID, element ID, or other target
-      value?: string;          // URL, animation name, or other data
-      delay?: number;          // Delay in milliseconds
-      transition?: "none" | "fade" | "slide" | "zoom"; // Transition effect
+        | "navigate"
+        | "openModal"
+        | "toggleVisibility"
+        | "playVideo"
+        | "submitForm"
+        | "openLink"
+        | "scrollTo"
+        | "triggerAnimation";
+      targetId?: string;
+      value?: string;
+      delay?: number;
+      transition?: "none" | "fade" | "slide" | "zoom";
     };
     onHover?: {
-      action: "showTooltip" | "highlight" | "scale"; // Hover interactions
+      action: "showTooltip" | "highlight" | "scale";
       targetId?: string;
-      value?: string; // Tooltip text or scale factor
+      value?: string;
     };
     onLoad?: {
-      action: "animate" | "fetchData"; // Actions on page load
-      value?: string; // Animation name or API endpoint
+      action: "animate" | "fetchData";
+      value?: string;
     };
   };
   parentId?: number;
@@ -170,14 +170,43 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
               ...page,
               elements: page.elements.some((el) => el.id === id)
                 ? page.elements.map((el) =>
-                    el.id === id ? { ...el, ...updates, style: { ...el.style, ...updates.style } } : el
+                    el.id === id
+                      ? {
+                          ...el,
+                          ...updates,
+                          style: { ...el.style, ...updates.style },
+                          prototype: updates.prototype
+                            ? {
+                                ...el.prototype,
+                                ...updates.prototype,
+                                onClick: updates.prototype.onClick
+                                  ? { ...el.prototype?.onClick, ...updates.prototype.onClick }
+                                  : el.prototype?.onClick,
+                                onHover: updates.prototype.onHover
+                                  ? { ...el.prototype?.onHover, ...updates.prototype.onHover }
+                                  : el.prototype?.onHover,
+                                onLoad: updates.prototype.onLoad
+                                  ? { ...el.prototype?.onLoad, ...updates.prototype.onLoad }
+                                  : el.prototype?.onLoad,
+                              }
+                            : el.prototype,
+                        }
+                      : el
                   )
                 : [...page.elements, { id, ...updates } as Element],
             }
           : page
       );
+      const updatedElement = newPages
+        .find((p) => p.id === pageId)
+        ?.elements.find((el) => el.id === id);
       const newHistory = [...state.history.slice(0, state.historyIndex + 1), newPages];
-      return { pages: newPages, history: newHistory, historyIndex: newHistory.length - 1 };
+      return {
+        pages: newPages,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+        selectedElement: state.selectedElement?.id === id ? updatedElement || null : state.selectedElement,
+      };
     }),
 
   addPage: (title) =>
@@ -215,7 +244,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         page.id === pageId ? { ...page, elements: page.elements.filter((el) => el.id !== id) } : page
       );
       const newHistory = [...state.history.slice(0, state.historyIndex + 1), newPages];
-      return { pages: newPages, history: newHistory, historyIndex: newHistory.length - 1 };
+      return {
+        pages: newPages,
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+        selectedElement: state.selectedElement?.id === id ? null : state.selectedElement,
+      };
     }),
 
   duplicateElement: (pageId, id) =>
@@ -415,12 +449,20 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   setGutter: (gutter) => set({ gutter }),
 
-  handlePrototypeAction: (event, element) => {
+  handlePrototypeAction: (event: "onClick" | "onHover" | "onLoad", element: Element) => {
     const proto = element.prototype?.[event];
     if (!proto || !get().previewMode) return;
 
+    const applyTransition = (styleUpdate: Partial<Element["style"]>): Partial<Element["style"]> => {
+      const transitionStyle =
+        "transition" in proto && proto.transition && proto.transition !== "none"
+          ? { transition: `${proto.transition} ${proto.delay || 300}ms ease` }
+          : {};
+      return { ...styleUpdate, ...transitionStyle };
+    };
+
     const applyDelay = (callback: () => void) => {
-      if ("delay" in proto && proto.delay) {
+      if ('delay' in proto && proto.delay) {
         setTimeout(callback, proto.delay);
       } else {
         callback();
@@ -432,55 +474,73 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         switch (proto.action) {
           case "navigate":
             applyDelay(() => {
-              if (proto.targetId) set({ currentPageId: proto.targetId });
+              if (proto.targetId && get().pages.some((p) => p.id === proto.targetId)) {
+                set({ currentPageId: proto.targetId, selectedElement: null });
+              }
             });
             break;
           case "openModal":
             applyDelay(() => {
-              console.log(`Open modal: ${proto.targetId}`);
-              // TODO: Implement modal visibility toggle (requires modal state)
+              const page = get().pages.find((p) => p.id === get().currentPageId);
+              if (!page || !proto.targetId) return;
+              const modal = page.elements.find((el) => el.id === Number(proto.targetId) && el.type === "modal");
+              if (!modal) return;
+              set((state) => ({
+                pages: state.pages.map((p) =>
+                  p.id === state.currentPageId
+                    ? {
+                        ...p,
+                        elements: p.elements.map((el) =>
+                          el.id === Number(proto.targetId)
+                            ? { ...el, style: { ...el.style, ...applyTransition({ display: "block" }) } }
+                            : el
+                        ),
+                      }
+                    : p
+                ),
+              }));
             });
             break;
           case "toggleVisibility":
             applyDelay(() => {
-              set((state) => {
-                const page = state.pages.find((p) => p.id === state.currentPageId);
-                if (!page || !proto.targetId) return state;
-                const target = page.elements.find((el) => el.id === Number(proto.targetId));
-                if (!target) return state;
-                return {
-                  pages: state.pages.map((p) =>
-                    p.id === state.currentPageId
-                      ? {
-                          ...p,
-                          elements: p.elements.map((el) =>
-                            el.id === Number(proto.targetId)
-                              ? {
-                                  ...el,
-                                  style: {
-                                    ...el.style,
+              const page = get().pages.find((p) => p.id === get().currentPageId);
+              if (!page || !proto.targetId) return;
+              const target = page.elements.find((el) => el.id === Number(proto.targetId));
+              if (!target) return;
+              set((state) => ({
+                pages: state.pages.map((p) =>
+                  p.id === state.currentPageId
+                    ? {
+                        ...p,
+                        elements: p.elements.map((el) =>
+                          el.id === Number(proto.targetId)
+                            ? {
+                                ...el,
+                                style: {
+                                  ...el.style,
+                                  ...applyTransition({
                                     display: el.style?.display === "none" ? "block" : "none",
-                                  },
-                                }
-                              : el
-                          ),
-                        }
-                      : p
-                  ),
-                };
-              });
+                                  }),
+                                },
+                              }
+                            : el
+                        ),
+                      }
+                    : p
+                ),
+              }));
             });
             break;
           case "playVideo":
             applyDelay(() => {
-              console.log(`Play video: ${proto.targetId}`);
-              // TODO: Implement video playback (requires video ref or state)
+              const video = document.getElementById(`element-${proto.targetId}`) as HTMLVideoElement;
+              if (video && video.paused) video.play();
             });
             break;
           case "submitForm":
             applyDelay(() => {
-              console.log(`Submit form: ${proto.targetId}`);
-              // TODO: Implement form submission (requires form handling)
+              const form = document.getElementById(`element-${proto.targetId}`) as HTMLFormElement;
+              if (form) form.requestSubmit();
             });
             break;
           case "openLink":
@@ -492,14 +552,40 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
             applyDelay(() => {
               if (proto.targetId) {
                 const el = document.getElementById(`element-${proto.targetId}`);
-                if (el) el.scrollIntoView({ behavior: proto.transition === "none" ? "auto" : "smooth" });
+                if (el) {
+                  el.scrollIntoView({
+                    behavior: proto.transition === "none" ? "auto" : "smooth",
+                  });
+                }
               }
             });
             break;
           case "triggerAnimation":
             applyDelay(() => {
-              console.log(`Trigger animation: ${proto.value}`);
-              // TODO: Implement animation (requires animation library or CSS)
+              const page = get().pages.find((p) => p.id === get().currentPageId);
+              if (!page || !element.id) return;
+              set((state) => ({
+                pages: state.pages.map((p) =>
+                  p.id === state.currentPageId
+                    ? {
+                        ...p,
+                        elements: p.elements.map((el) =>
+                          el.id === element.id
+                            ? {
+                                ...el,
+                                style: {
+                                  ...el.style,
+                                  ...applyTransition({
+                                    animation: proto.value ? `${proto.value} 1s ease` : undefined,
+                                  }),
+                                },
+                              }
+                            : el
+                        ),
+                      }
+                    : p
+                ),
+              }));
             });
             break;
         }
@@ -508,16 +594,46 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       case "onHover":
         switch (proto.action) {
           case "showTooltip":
-            console.log(`Show tooltip: ${proto.value}`);
-            // TODO: Implement tooltip UI
+            console.log(`Show tooltip: ${proto.value}`); // Handled in Canvas
             break;
           case "highlight":
-            console.log(`Highlight: ${proto.targetId}`);
-            // TODO: Implement highlight effect (e.g., border or background change)
+            const pageHighlight = get().pages.find((p) => p.id === get().currentPageId);
+            if (!pageHighlight || !proto.targetId) return;
+            set((state) => ({
+              pages: state.pages.map((p) =>
+                p.id === state.currentPageId
+                  ? {
+                      ...p,
+                      elements: p.elements.map((el) =>
+                        el.id === Number(proto.targetId)
+                          ? { ...el, style: { ...el.style, outline: "2px solid #3b82f6" } }
+                          : el
+                      ),
+                    }
+                  : p
+              ),
+            }));
             break;
           case "scale":
-            console.log(`Scale: ${proto.value}`);
-            // TODO: Implement scaling (requires dynamic style update)
+            const pageScale = get().pages.find((p) => p.id === get().currentPageId);
+            if (!pageScale || !element.id) return;
+            set((state) => ({
+              pages: state.pages.map((p) =>
+                p.id === state.currentPageId
+                  ? {
+                      ...p,
+                      elements: p.elements.map((el) =>
+                        el.id === element.id
+                          ? {
+                              ...el,
+                              style: { ...el.style, transform: `scale(${proto.value || "1.1"})` },
+                            }
+                          : el
+                      ),
+                    }
+                  : p
+              ),
+            }));
             break;
         }
         break;
@@ -525,12 +641,51 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       case "onLoad":
         switch (proto.action) {
           case "animate":
-            console.log(`Animate on load: ${proto.value}`);
-            // TODO: Implement load animation
+            const pageAnimate = get().pages.find((p) => p.id === get().currentPageId);
+            if (!pageAnimate || !element.id) return;
+            set((state) => ({
+              pages: state.pages.map((p) =>
+                p.id === state.currentPageId
+                  ? {
+                      ...p,
+                      elements: p.elements.map((el) =>
+                        el.id === element.id
+                          ? {
+                              ...el,
+                              style: {
+                                ...el.style,
+                                animation: proto.value ? `${proto.value} 1s ease` : undefined,
+                              },
+                            }
+                          : el
+                      ),
+                    }
+                  : p
+              ),
+            }));
             break;
           case "fetchData":
-            console.log(`Fetch data: ${proto.value}`);
-            // TODO: Implement data fetching
+            applyDelay(() => {
+              if (proto.value) {
+                fetch(proto.value)
+                  .then((res) => res.json())
+                  .then((data) =>
+                    set((state) => ({
+                      pages: state.pages.map((p) =>
+                        p.id === state.currentPageId
+                          ? {
+                              ...p,
+                              elements: p.elements.map((el) =>
+                                el.id === element.id ? { ...el, content: JSON.stringify(data) } : el
+                              ),
+                            }
+                          : p
+                      ),
+                    }))
+                  )
+                  .catch((err) => console.error("Fetch failed:", err));
+              }
+            });
             break;
         }
         break;
