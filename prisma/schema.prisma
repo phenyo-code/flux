@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,32 +8,45 @@ datasource db {
 }
 
 model Design {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  title     String
-  pages     Page[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  pages            Page[]            // Required: Every design has pages
+  customComponents CustomComponent[] // Optional: Custom components for this design
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model Page {
-  id             String   @id @default(auto()) @map("_id") @db.ObjectId
-  designId       String   @db.ObjectId
-  design         Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
-  title          String
-  elements       Json
-  backgroundColor String   @default("#ffffff")
-  backgroundImage String?
-  frameHeight    Int?
-  columnCount    Int?
-  gridSize       Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String            @id @default(auto()) @map("_id") @db.ObjectId
+  designId           String            @db.ObjectId
+  design             Design            @relation(fields: [designId], references: [id], onDelete: Cascade)
+  title              String
+  elements           Json              // Required: Core content of the page as JSON array
+  backgroundColor    String            @default("#ffffff")
+  backgroundImage    String?
+  frameHeight        Int?              @default(800)
+  columnCount        Int?              @default(1)
+  gridSize           Int?              @default(10)
+  prototype          Json?             // Optional: Stores frame-level prototype data
+  customComponentIds String[]          @db.ObjectId @default([]) // Optional: Specific custom components linked to this page
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 }
 
 model Template {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String   @unique
-  pages     Json
+  pages     Json     // Stores array of pages as JSON
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
+model CustomComponent {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  designId  String   @db.ObjectId
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  name      String   // Unique within a design, enforced in app logic if needed
+  elements  Json     // Stores the array of elements as JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

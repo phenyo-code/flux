@@ -4,17 +4,21 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { FaPlus, FaRocket } from "react-icons/fa";
 import { useRouter } from "next/navigation";
+import { useBuilderStore } from "@/app/lib/store";
 
 export default function Projects() {
+  const { setDesignTitle } = useBuilderStore(); // Access store to set designTitle
   const [designs, setDesigns] = useState<{ id: string; name: string; updatedAt: string; pages: any[] }[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string; pages: any[] }[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [projectType, setProjectType] = useState<"design" | "template">("design"); // Track project type
+  const [title, setTitle] = useState(""); // Input for custom title
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const router = useRouter();
 
   useEffect(() => {
     const fetchDesigns = async () => {
       try {
-        // Assuming /api/designs exists; if not, adjust or remove
         const res = await fetch("/api/projects");
         if (!res.ok) {
           console.log("No /api/designs endpoint available; skipping design fetch.");
@@ -22,12 +26,14 @@ export default function Projects() {
           return;
         }
         const data = await res.json();
-        setDesigns(data.map((design: any) => ({
-          id: design.id,
-          name: design.title,
-          updatedAt: design.updatedAt || new Date().toISOString().split("T")[0],
-          pages: design.pages,
-        })));
+        setDesigns(
+          data.map((design: any) => ({
+            id: design.id,
+            name: design.title,
+            updatedAt: design.updatedAt || new Date().toISOString().split("T")[0],
+            pages: design.pages,
+          }))
+        );
       } catch (error) {
         console.error("Error fetching designs:", error);
         setDesigns([]);
@@ -89,11 +95,23 @@ export default function Projects() {
     });
   }, [designs, templates]);
 
-  const handleNewDesign = () => {
-    router.push("/builder/newproject");
+  const handleNewProject = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleCreateProject = () => {
+    if (!title.trim()) {
+      setDesignTitle(projectType === "design" ? "Untitled Design" : "Untitled Template"); // Default title if empty
+    } else {
+      setDesignTitle(title); // Set custom title
+    }
+    router.push(`/builder/${projectType}`);
+    setIsModalOpen(false);
+    setTitle(""); // Reset input
   };
 
   const handleTemplateCanvasClick = (templateName: string) => {
+    setDesignTitle(`New Design from ${templateName}`); // Set title based on template
     router.push(`/builder/new?template=${templateName}`);
   };
 
@@ -118,10 +136,10 @@ export default function Projects() {
           <h2 className="text-4xl font-bold text-gray-900">Your Designs</h2>
           <div className="flex items-center gap-4">
             <button
-              onClick={handleNewDesign}
+              onClick={handleNewProject}
               className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 hover:bg-blue-600 transition-all shadow-md"
             >
-              <FaPlus /> New Design
+              <FaPlus /> New Project
             </button>
           </div>
         </div>
@@ -136,7 +154,7 @@ export default function Projects() {
               <Link
                 key={design.id}
                 href={`/builder/${design.id}`}
-                className="p-6   hover:shadow-lg transition-shadow flex flex-col"
+                className="p-6 hover:shadow-lg transition-shadow flex flex-col"
               >
                 <canvas
                   ref={(el) => {
@@ -178,6 +196,49 @@ export default function Projects() {
           )}
         </div>
       </main>
+
+      {/* Modal for creating new project */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-4">Create a New Project</h3>
+            <p className="text-gray-600 mb-4">Choose project type and give it a name:</p>
+            <div className="mb-4">
+              <select
+                value={projectType}
+                onChange={(e) => setProjectType(e.target.value as "design" | "template")}
+                className="w-full p-2 border rounded text-gray-700 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="design">Design (Private)</option>
+                <option value="template">Template (Public)</option>
+              </select>
+            </div>
+            <div className="mb-6">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={projectType === "design" ? "Enter design name" : "Enter template name"}
+                className="w-full p-2 border rounded text-gray-700 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={handleCreateProject}
+                className="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="bg-gray-800 text-white py-10">
         <div className="container mx-auto px-6 text-center text-gray-400 text-sm">

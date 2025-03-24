@@ -29,7 +29,10 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     layoutMode,
     previewMode,
     handlePrototypeAction,
+    currentDesignId,
+    componentBuilderMode,
   } = useBuilderStore();
+
   const currentPage = pages.find((p) => p.id === currentPageId) || {
     id: "default",
     title: "Default",
@@ -52,13 +55,15 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: Element } | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string; elementId: number } | null>(null); // New for onHover tooltips
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string; elementId: number } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const hasRunOnLoadRef = useRef(false);
 
   const FRAME_WIDTH = 1200;
   const MIN_GRID_SIZE = 2;
+  const INFINITE_WIDTH = 5000; // For component builder mode
   const INFINITE_HEIGHT = 10000;
 
   const Icons = { ...FaIcons, ...MdIcons, ...IoIcons, ...Io5Icons };
@@ -68,18 +73,20 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
 
   const clampToFrame = (x: number, y: number, width: number, height: number) => {
     const frameHeight = currentPage.frameHeight ?? 800;
+    const frameWidth = componentBuilderMode && !previewMode ? INFINITE_WIDTH : FRAME_WIDTH;
     return {
-      x: Math.max(0, Math.min(x, FRAME_WIDTH - width)),
-      y: Math.max(0, Math.min(y, frameHeight - height)),
+      x: Math.max(0, Math.min(x, frameWidth - width < 0 ? 0 : frameWidth - width)),
+      y: Math.max(0, Math.min(y, frameHeight - height < 0 ? 0 : frameHeight - height)),
     };
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, parentEl?: Element) => {
     e.preventDefault();
     e.stopPropagation();
     if (!currentPageId || previewMode) return;
 
     const type = e.dataTransfer.getData("type");
+    const customComponentData = e.dataTransfer.getData("customComponent");
     const rect = frameRef.current!.getBoundingClientRect();
     const offsetX = snapToGrid((e.clientX - rect.left) / zoom);
     const offsetY = snapToGrid((e.clientY - rect.top) / zoom);
@@ -96,7 +103,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             : type === "text"
             ? 200
             : type === "nav"
-            ? 400
+            ? FRAME_WIDTH
             : type === "accordion"
             ? 300
             : type === "modal"
@@ -106,7 +113,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             : type === "video"
             ? 320
             : type === "divider"
-            ? 200
+            ? FRAME_WIDTH
             : type === "progress"
             ? 200
             : type === "icon"
@@ -117,6 +124,10 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             ? 200
             : type === "map"
             ? 400
+            : type === "rectangle"
+            ? FRAME_WIDTH
+            : type === "horizontalScroller"
+            ? 600
             : 200
         ),
         height: snapToGrid(
@@ -146,6 +157,10 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
             ? 50
             : type === "map"
             ? 300
+            : type === "rectangle"
+            ? 100
+            : type === "horizontalScroller"
+            ? 200
             : 150
         ),
         content: type === "icon" ? "FaStar" : type === "button" ? "Click Me" : type === "text" ? "Sample Text" : "",
@@ -165,24 +180,48 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
               ? "#ffffff"
               : type === "nav"
               ? "#1f2937"
+              : type === "rectangle"
+              ? "#e5e7eb"
+              : type === "horizontalScroller"
+              ? "#f9fafb"
               : undefined,
           borderRadius: type === "button" || type === "modal" || type === "tabs" ? "6px" : undefined,
           color: type === "icon" ? "#1f2937" : type === "button" || type === "nav" ? "#ffffff" : "#1f2937",
           fontSize: type === "icon" ? "24px" : "16px",
           fontFamily: "Inter, sans-serif",
-          border:
-            type === "modal" || type === "table"
-              ? "1px solid #e5e7eb"
-              : type === "input"
-              ? "1px solid #d1d5db"
-              : undefined,
-          display: type === "modal" ? "none" : undefined, // Modals start hidden
+          border: type === "modal" || type === "table" ? "1px solid #e5e7eb" : type === "input" ? "1px solid #d1d5db" : undefined,
+          display: type === "modal" ? "none" : undefined,
         },
+        parentId: parentEl?.id, // Assign parent if dropped into horizontalScroller
+        children: type === "horizontalScroller" ? [] : undefined, // Initialize children array for horizontalScroller
       };
       const clamped = clampToFrame(newElement.x, newElement.y, newElement.width, newElement.height);
       updateElement(currentPageId, newElement.id, { ...newElement, ...clamped });
+      if (parentEl && parentEl.type === "horizontalScroller") {
+        updateElement(currentPageId, parentEl.id, { children: [...(parentEl.children || []), newElement as Element] });
+      }
       setSelectedElement(newElement);
       setSelectedIds([newElement.id]);
+    } else if (customComponentData && !componentBuilderMode) {
+      const customComponent = JSON.parse(customComponentData);
+      if (customComponent.type === "custom" && customComponent.elements) {
+        const newElements = customComponent.elements.map((el: Element) => ({
+          ...el,
+          id: Date.now() + Math.random(),
+          x: el.x + offsetX,
+          y: el.y + offsetY,
+          parentId: parentEl?.id, // Assign parent if dropped into horizontalScroller
+        }));
+        newElements.forEach((el: Element) => {
+          const clamped = clampToFrame(el.x, el.y, el.width, el.height);
+          updateElement(currentPageId, el.id, { ...el, ...clamped });
+        });
+        if (parentEl && parentEl.type === "horizontalScroller") {
+          updateElement(currentPageId, parentEl.id, { children: [...(parentEl.children || []), ...newElements.map((el: Element) => el.id)] });
+        }
+        setSelectedIds(newElements.map((el: Element) => el.id));
+        setSelectedElement(newElements[0]);
+      }
     }
   };
 
@@ -191,8 +230,12 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     const frameCenterX = FRAME_WIDTH / 2;
     const frameCenterY = (currentPage.frameHeight ?? 800) / 2;
     const frameHeight = currentPage.frameHeight ?? 800;
+    const frameWidth = componentBuilderMode && !previewMode ? INFINITE_WIDTH : FRAME_WIDTH;
 
     const snapThreshold = 8;
+    const spacingThreshold = 4;
+    const precisionThreshold = 2;
+
     const checkPoints = {
       left: x,
       right: x + width,
@@ -202,19 +245,21 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       centerY: y + height / 2,
     };
 
-    if (Math.abs(checkPoints.centerX - frameCenterX) < snapThreshold)
-      newGuides.push({ id: "center-x", x: frameCenterX, type: "center-x" });
-    if (Math.abs(checkPoints.centerY - frameCenterY) < snapThreshold)
-      newGuides.push({ id: "center-y", y: frameCenterY, type: "center-y" });
-    if (Math.abs(checkPoints.left) < snapThreshold) newGuides.push({ id: "left-edge", x: 0, type: "edge-x" });
-    if (Math.abs(checkPoints.right - FRAME_WIDTH) < snapThreshold)
-      newGuides.push({ id: "right-edge", x: FRAME_WIDTH, type: "edge-x" });
-    if (Math.abs(checkPoints.top) < snapThreshold) newGuides.push({ id: "top-edge", y: 0, type: "edge-y" });
-    if (Math.abs(checkPoints.bottom - frameHeight) < snapThreshold)
-      newGuides.push({ id: "bottom-edge", y: frameHeight, type: "edge-y" });
+    const frameSnaps = [
+      { id: "center-x", x: frameCenterX, type: "center-x" },
+      { id: "center-y", y: frameCenterY, type: "center-y" },
+      { id: "left-edge", x: 0, type: "edge-x" },
+      { id: "right-edge", x: frameWidth, type: "edge-x" },
+      { id: "top-edge", y: 0, type: "edge-y" },
+      { id: "bottom-edge", y: frameHeight, type: "edge-y" },
+    ];
+
+    frameSnaps.forEach((snap) => {
+      if (snap.x !== undefined && Math.abs(checkPoints.centerX - snap.x) < snapThreshold) newGuides.push(snap);
+      if (snap.y !== undefined && Math.abs(checkPoints.centerY - snap.y) < snapThreshold) newGuides.push(snap);
+    });
 
     const elements = currentPage.elements.filter((el) => !draggedIds.includes(el.id));
-    const spacingThreshold = 4;
 
     elements.forEach((el) => {
       const bounds = {
@@ -227,69 +272,59 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
       };
 
       ["left", "right", "centerX"].forEach((key) => {
-        const pos = bounds[key as keyof typeof bounds];
-        const checkPos = checkPoints[key as keyof typeof checkPoints];
-        if (Math.abs(pos - checkPos) < snapThreshold) {
-          newGuides.push({ id: `${el.id}-${key}`, x: pos, type: `align-x-${key}` });
+        if (Math.abs(bounds[key as keyof typeof bounds] - checkPoints[key as keyof typeof checkPoints]) < snapThreshold) {
+          newGuides.push({ id: `${el.id}-${key}`, x: bounds[key as keyof typeof bounds], type: `align-x-${key}` });
         }
       });
+
       ["top", "bottom", "centerY"].forEach((key) => {
-        const pos = bounds[key as keyof typeof bounds];
-        const checkPos = checkPoints[key as keyof typeof checkPoints];
-        if (Math.abs(pos - checkPos) < snapThreshold) {
-          newGuides.push({ id: `${el.id}-${key}`, y: pos, type: `align-y-${key}` });
+        if (Math.abs(bounds[key as keyof typeof bounds] - checkPoints[key as keyof typeof checkPoints]) < snapThreshold) {
+          newGuides.push({ id: `${el.id}-${key}`, y: bounds[key as keyof typeof bounds], type: `align-y-${key}` });
         }
       });
 
-      if (x > bounds.right && x < FRAME_WIDTH) {
-        const distance = x - bounds.right;
-        if (distance < 100) {
-          newGuides.push({ id: `${el.id}-spacing-x-right`, x: bounds.right, to: x, distance, type: "spacing-x" });
-        }
+      if (Math.abs(x - bounds.right) < 100) {
+        newGuides.push({
+          id: `${el.id}-spacing-x-right`,
+          x: bounds.right,
+          to: x,
+          distance: x - bounds.right,
+          type: "spacing-x",
+        });
       }
-      if (bounds.left > checkPoints.right && bounds.left < FRAME_WIDTH) {
-        const distance = bounds.left - checkPoints.right;
-        if (distance < 100) {
-          newGuides.push({ id: `${el.id}-spacing-x-left`, x: checkPoints.right, to: bounds.left, distance, type: "spacing-x" });
-        }
+      if (Math.abs(bounds.left - checkPoints.right) < 100) {
+        newGuides.push({
+          id: `${el.id}-spacing-x-left`,
+          x: checkPoints.right,
+          to: bounds.left,
+          distance: bounds.left - checkPoints.right,
+          type: "spacing-x",
+        });
       }
-      if (y > bounds.bottom && y < frameHeight) {
-        const distance = y - bounds.bottom;
-        if (distance < 100) {
-          newGuides.push({ id: `${el.id}-spacing-y-bottom`, y: bounds.bottom, to: y, distance, type: "spacing-y" });
-        }
+      if (Math.abs(y - bounds.bottom) < 100) {
+        newGuides.push({
+          id: `${el.id}-spacing-y-bottom`,
+          y: bounds.bottom,
+          to: y,
+          distance: y - bounds.bottom,
+          type: "spacing-y",
+        });
       }
-      if (bounds.top > checkPoints.bottom && bounds.top < frameHeight) {
-        const distance = bounds.top - checkPoints.bottom;
-        if (distance < 100) {
-          newGuides.push({ id: `${el.id}-spacing-y-top`, y: checkPoints.bottom, to: bounds.top, distance, type: "spacing-y" });
-        }
+      if (Math.abs(bounds.top - checkPoints.bottom) < 100) {
+        newGuides.push({
+          id: `${el.id}-spacing-y-top`,
+          y: checkPoints.bottom,
+          to: bounds.top,
+          distance: bounds.top - checkPoints.bottom,
+          type: "spacing-y",
+        });
       }
 
-      if (
-        el.type === "container" &&
-        checkPoints.left >= bounds.left &&
-        checkPoints.right <= bounds.right &&
-        checkPoints.top >= bounds.top &&
-        checkPoints.bottom <= bounds.bottom
-      ) {
-        const insideLeft = checkPoints.left - bounds.left;
-        const insideRight = bounds.right - checkPoints.right;
-        const insideTop = checkPoints.top - bounds.top;
-        const insideBottom = bounds.bottom - checkPoints.bottom;
-
-        if (insideLeft < 100) {
-          newGuides.push({ id: `${el.id}-inside-left`, x: bounds.left, to: checkPoints.left, distance: insideLeft, type: "spacing-x-inside" });
-        }
-        if (insideRight < 100) {
-          newGuides.push({ id: `${el.id}-inside-right`, x: checkPoints.right, to: bounds.right, distance: insideRight, type: "spacing-x-inside" });
-        }
-        if (insideTop < 100) {
-          newGuides.push({ id: `${el.id}-inside-top`, y: bounds.top, to: checkPoints.top, distance: insideTop, type: "spacing-y-inside" });
-        }
-        if (insideBottom < 100) {
-          newGuides.push({ id: `${el.id}-inside-bottom`, y: checkPoints.bottom, to: bounds.bottom, distance: insideBottom, type: "spacing-y-inside" });
-        }
+      if (Math.abs(bounds.centerX - checkPoints.centerX) < precisionThreshold) {
+        newGuides.push({ id: `${el.id}-precision-x`, x: bounds.centerX, type: "precision-x" });
+      }
+      if (Math.abs(bounds.centerY - checkPoints.centerY) < precisionThreshold) {
+        newGuides.push({ id: `${el.id}-precision-y`, y: bounds.centerY, type: "precision-y" });
       }
     });
 
@@ -459,7 +494,7 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
         animationFrameRef.current = requestAnimationFrame(moveElement);
       }
     },
-    [currentPageId, resizing, dragging, panning, isPanning, currentPage.elements, updateElement, selectedIds, zoom, selectionBox, guides, previewMode]
+    [resizing, dragging, panning, isPanning, currentPageId, previewMode, zoom, gridSize, currentPage.elements, selectionBox]
   );
 
   const handleMouseUp = () => {
@@ -476,8 +511,10 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     if (el.isLocked || previewMode) return;
     const rect = frameRef.current!.getBoundingClientRect();
     setContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, element: el });
-    setSelectedElement(el);
-    setSelectedIds([el.id]);
+    if (!componentBuilderMode) {
+      setSelectedElement(el);
+      setSelectedIds([el.id]);
+    }
   };
 
   const closeContextMenu = () => setContextMenu(null);
@@ -497,327 +534,418 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
     });
   };
 
-  const renderElement = (el: Element) => {
-    const isSelected = selectedIds.includes(el.id);
-    const isEditable = ["text", "button", "nav", "link", "input", "accordion", "modal", "tabs"].includes(el.type) && selectedElement?.id === el.id && !el.isLocked && !previewMode;
-    const isDragging = dragging?.ids.includes(el.id);
 
-    const normalizedStyle = { ...el.style };
-    if (normalizedStyle.background && !normalizedStyle.backgroundColor) {
-      delete normalizedStyle.backgroundColor;
-    } else if (normalizedStyle.backgroundColor) {
-      delete normalizedStyle.background;
+
+
+
+  // New HorizontalScroller component
+function HorizontalScroller({
+  el,
+  children,
+  previewMode,
+  currentPageId,
+  updateElement,
+  handleDrop,
+}: {
+  el: Element;
+  children: Element[];
+  previewMode: boolean;
+  currentPageId: string | null;
+  updateElement: (pageId: string, elementId: number, updates: Partial<Element>) => void;
+  handleDrop: (e: React.DragEvent<HTMLDivElement>, parentEl?: Element) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollLeft = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: -200, behavior: "smooth" });
     }
+  };
 
-    const baseStyle: React.CSSProperties = {
-      position: "absolute",
-      left: el.x,
-      top: el.y,
-      width: el.width,
-      height: el.height,
-      zIndex: normalizedStyle.zIndex ?? 0,
-      border: isSelected && !previewMode ? "2px solid #3b82f6" : (isDragging || isEditable) && !previewMode ? "1px dashed #d1d5db" : normalizedStyle.border || "none",
-      opacity: el.isLocked ? 0.6 : normalizedStyle.opacity ?? 1,
-      transform: normalizedStyle.transform,
-      mixBlendMode: normalizedStyle.mixBlendMode || "normal",
-      cursor: previewMode && el.prototype?.onClick ? "pointer" : normalizedStyle.cursor || (el.isLocked || previewMode ? "default" : "move"),
-      boxShadow: normalizedStyle.boxShadow,
-      display: normalizedStyle.display || "block", // Respect display from prototype actions
-      transition: normalizedStyle.transition, // Respect transitions from prototype
-      animation: normalizedStyle.animation, // Respect animations from prototype
-    };
-
-    const contentStyle = {
-      background: normalizedStyle.background || undefined,
-      backgroundColor: normalizedStyle.backgroundColor || undefined,
-      borderRadius: normalizedStyle.borderRadius || "0px",
-      fontFamily: normalizedStyle.fontFamily || "Inter, sans-serif",
-      fontSize: normalizedStyle.fontSize || "16px",
-      fontWeight: normalizedStyle.fontWeight || "400",
-      color: normalizedStyle.color || "#1f2937",
-      textAlign: normalizedStyle.textAlign || "left",
-      lineHeight: normalizedStyle.lineHeight || "1.5",
-      letterSpacing: normalizedStyle.letterSpacing || "0px",
-      fontStyle: normalizedStyle.fontStyle || "normal",
-      textDecoration: normalizedStyle.textDecoration || "none",
-      whiteSpace: "pre-wrap" as const,
-      wordBreak: "normal" as const,
-      overflowWrap: "break-word" as const,
-    };
-
-    let IconComponent = null;
-    if (el.type === "icon" && el.content) {
-      IconComponent = Icons[el.content as keyof typeof Icons];
-      if (!IconComponent) {
-        console.warn(`Icon "${el.content}" not found in imported sets. Ensure it matches a valid react-icons name (e.g., FaStar, MdHome).`);
-      }
+  const scrollRight = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: 200, behavior: "smooth" });
     }
+  };
 
-    return (
+  const contentStyle = {
+    background: el.style?.background || undefined,
+    backgroundColor: el.style?.backgroundColor || undefined,
+    borderRadius: el.style?.borderRadius || "0px",
+    fontFamily: el.style?.fontFamily || "Inter, sans-serif",
+    fontSize: el.style?.fontSize || "16px",
+    fontWeight: el.style?.fontWeight || "400",
+    color: el.style?.color || "#1f2937",
+    textAlign: el.style?.textAlign || "left",
+    lineHeight: el.style?.lineHeight || "1.5",
+    letterSpacing: el.style?.letterSpacing || "0px",
+    fontStyle: el.style?.fontStyle || "normal",
+    textDecoration: el.style?.textDecoration || "none",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+    overflowWrap: "break-word" as const,
+  };
+
+  return (
+    <div
+      className="w-full h-full relative"
+      onDrop={(e) => !previewMode && handleDrop(e, el)}
+      onDragOver={(e) => !previewMode && e.preventDefault()}
+    >
       <div
-        key={el.id}
-        id={`element-${el.id}`}
-        style={baseStyle}
-        draggable={!isEditable && !el.isLocked && !isPanning && !previewMode}
-        onDragStart={(e) => {
-          e.dataTransfer.setData("id", el.id.toString());
+        ref={scrollRef}
+        className="w-full h-full flex overflow-x-auto"
+        style={{
+          ...contentStyle,
+          scrollSnapType: el.scrollOptions?.snap === "mandatory" ? "x mandatory" : el.scrollOptions?.snap === "proximity" ? "x proximity" : "none",
+          scrollbarWidth: "none", // Firefox
+          msOverflowStyle: "none", // IE/Edge
         }}
-        onMouseDown={(e) => handleMouseDown(e, el)}
-        onClick={(e) => {
-          if (previewMode && el.prototype?.onClick) {
-            e.stopPropagation();
-            handlePrototypeAction("onClick", el);
-          }
-        }}
-        onMouseEnter={(e) => {
-          if (previewMode && el.prototype?.onHover) {
-            handlePrototypeAction("onHover", el);
-            if (el.prototype.onHover.action === "showTooltip" && el.prototype.onHover.value) {
-              const rect = frameRef.current!.getBoundingClientRect();
-              setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, text: el.prototype.onHover.value, elementId: el.id });
-            }
-          }
-        }}
-        onMouseLeave={() => {
-          if (previewMode && el.prototype?.onHover?.action === "showTooltip") {
-            setTooltip(null);
-          }
-        }}
-        onDoubleClick={() => !el.isLocked && isEditable && setSelectedElement(el)}
-        onContextMenu={(e) => handleContextMenu(e, el)}
-        className={`relative group`}
       >
-        {isEditable ? (
-          el.type === "text" ? (
-            <textarea
-              value={el.content || ""}
-              onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
-              onBlur={() => setSelectedElement(el)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setSelectedElement(null);
-                  e.preventDefault();
-                }
-              }}
-              className="w-full h-full px-2 py-1 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-              style={{ ...contentStyle, overflow: "auto" }}
-              autoFocus
-            />
-          ) : (
+        <style>{`#element-${el.id}::-webkit-scrollbar { display: none; }`}</style>
+        {children.length > 0 ? (
+          children.map((child) => (
+            <div
+              key={child.id}
+              className="flex-shrink-0 snap-start"
+              style={{ width: el.scrollOptions?.itemWidth ? `${el.scrollOptions.itemWidth}px` : "auto", height: "100%" }}
+            >
+              {renderElement(child)} {/* Recursive call to render child */}
+            </div>
+          ))
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-gray-500">Drop elements here</div>
+        )}
+      </div>
+      {el.scrollOptions?.controls === "arrows" && previewMode && (
+        <>
+          <button
+            onClick={scrollLeft}
+            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-full opacity-75 hover:opacity-100"
+          >
+            <FaIcons.FaArrowLeft />
+          </button>
+          <button
+            onClick={scrollRight}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white p-2 rounded-full opacity-75 hover:opacity-100"
+          >
+            <FaIcons.FaArrowRight />
+          </button>
+        </>
+      )}
+      {el.scrollOptions?.controls === "dots" && previewMode && children.length > 1 && (
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
+          {children.map((_, index) => (
+            <div key={index} className="w-2 h-2 bg-gray-500 rounded-full" />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const renderElement = (el: Element) => {
+  const isSelected = selectedIds.includes(el.id);
+  const isEditable = ["text", "button", "nav", "link", "input", "accordion", "modal", "tabs"].includes(el.type) && selectedElement?.id === el.id && !el.isLocked && !previewMode;
+  const isDragging = dragging?.ids.includes(el.id);
+
+  const normalizedStyle = { ...el.style };
+  if (normalizedStyle.background && !normalizedStyle.backgroundColor) {
+    delete normalizedStyle.backgroundColor;
+  } else if (normalizedStyle.backgroundColor) {
+    delete normalizedStyle.background;
+  }
+
+  const baseStyle: React.CSSProperties = {
+    position: "absolute",
+    left: el.x,
+    top: el.y,
+    width: el.width,
+    height: el.height,
+    zIndex: normalizedStyle.zIndex ?? 0,
+    border: isSelected && !previewMode ? "2px solid #3b82f6" : (isDragging || isEditable) && !previewMode ? "1px dashed #d1d5db" : normalizedStyle.border || "none",
+    opacity: el.isLocked ? 0.6 : normalizedStyle.opacity ?? 1,
+    transform: normalizedStyle.transform,
+    mixBlendMode: normalizedStyle.mixBlendMode || "normal",
+    cursor: previewMode && el.prototype?.onClick ? "pointer" : normalizedStyle.cursor || (el.isLocked || previewMode ? "default" : "move"),
+    boxShadow: normalizedStyle.boxShadow,
+    display: normalizedStyle.display || "block",
+    transition: normalizedStyle.transition,
+    animation: normalizedStyle.animation,
+  };
+
+  const contentStyle = {
+    background: normalizedStyle.background || undefined,
+    backgroundColor: normalizedStyle.backgroundColor || undefined,
+    borderRadius: normalizedStyle.borderRadius || "0px",
+    fontFamily: normalizedStyle.fontFamily || "Inter, sans-serif",
+    fontSize: normalizedStyle.fontSize || "16px",
+    fontWeight: normalizedStyle.fontWeight || "400",
+    color: normalizedStyle.color || "#1f2937",
+    textAlign: normalizedStyle.textAlign || "left",
+    lineHeight: normalizedStyle.lineHeight || "1.5",
+    letterSpacing: normalizedStyle.letterSpacing || "0px",
+    fontStyle: normalizedStyle.fontStyle || "normal",
+    textDecoration: normalizedStyle.textDecoration || "none",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+    overflowWrap: "break-word" as const,
+  };
+
+  let IconComponent = null;
+  if (el.type === "icon" && el.content) {
+    IconComponent = Icons[el.content as keyof typeof Icons];
+    if (!IconComponent) {
+      console.warn(`Icon "${el.content}" not found in imported sets. Ensure it matches a valid react-icons name (e.g., FaStar, MdHome).`);
+    }
+  }
+
+  const children = currentPage.elements.filter((child) => child.parentId === el.id);
+
+  return (
+    <div
+      key={el.id}
+      id={`element-${el.id}`}
+      style={baseStyle}
+      draggable={!isEditable && !el.isLocked && !isPanning && !previewMode}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("id", el.id.toString());
+      }}
+      onMouseDown={(e) => handleMouseDown(e, el)}
+      onClick={(e) => {
+        if (previewMode && el.prototype?.onClick) {
+          e.stopPropagation();
+          handlePrototypeAction("onClick", el);
+        }
+      }}
+      onMouseEnter={(e) => {
+        if (previewMode && el.prototype?.onHover) {
+          handlePrototypeAction("onHover", el);
+          if (el.prototype.onHover.action === "showTooltip" && el.prototype.onHover.value) {
+            const rect = frameRef.current!.getBoundingClientRect();
+            setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, text: el.prototype.onHover.value, elementId: el.id });
+          }
+        }
+      }}
+      onMouseLeave={() => {
+        if (previewMode && el.prototype?.onHover?.action === "showTooltip") {
+          setTooltip(null);
+        }
+      }}
+      onDoubleClick={() => !el.isLocked && isEditable && setSelectedElement(el)}
+      onContextMenu={(e) => handleContextMenu(e, el)}
+      className={`relative group`}
+    >
+      {isEditable ? (
+        el.type === "text" ? (
+          <textarea
+            value={el.content || ""}
+            onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
+            onBlur={() => setSelectedElement(el)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSelectedElement(null);
+                e.preventDefault();
+              }
+            }}
+            className="w-full h-full px-2 py-1 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            style={{ ...contentStyle, overflow: "auto" }}
+            autoFocus
+          />
+        ) : (
+          <input
+            type="text"
+            value={el.content || ""}
+            onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
+            onBlur={() => setSelectedElement(el)}
+            onKeyPress={(e) => e.key === "Enter" && setSelectedElement(el)}
+            className="w-full h-full px-2 py-1 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            style={contentStyle}
+            autoFocus
+          />
+        )
+      ) : (
+        <>
+          {el.type === "text" && (
+            <div className="w-full h-full px-2 py-1" style={{ ...contentStyle, display: "block" }}>
+              {el.content || ""}
+            </div>
+          )}
+          {el.type === "button" && (
+            <button className="w-full h-full flex items-center justify-center" style={contentStyle}>
+              {el.content || "Click"}
+            </button>
+          )}
+          {el.type === "rectangle" && <div className="w-full h-full" style={contentStyle} />}
+          {el.type === "nav" && (
+            <nav className="w-full h-full flex items-center justify-around" style={contentStyle}>
+              {(el.content || "Home,About,Contact").split(",").map((item, i) => (
+                <span key={i} className="px-3 py-1 hover:bg-gray-700/20 rounded">
+                  {item}
+                </span>
+              ))}
+            </nav>
+          )}
+          {el.type === "image" && (
+            <img src={el.content || "https://via.placeholder.com/250"} alt="Image" className="w-full h-full object-cover" style={contentStyle} />
+          )}
+          {el.type === "container" && <div className="w-full h-full" style={contentStyle}>{children.map((child) => renderElement(child))}</div>}
+          {el.type === "bottomSheet" && (
+            <div className="w-full h-full rounded-t-lg p-2 flex flex-col" style={contentStyle}>
+              <div>{el.content || "Bottom Sheet"}</div>
+              <div className="mt-1 flex-1">Content</div>
+            </div>
+          )}
+          {el.type === "radio" && (
+            <input type="radio" className="w-full h-full accent-blue-600" checked={el.content === "checked"} style={contentStyle} />
+          )}
+          {el.type === "link" && (
+            <a href={el.content || "#"} className="w-full h-full flex items-center justify-center hover:underline" style={contentStyle}>
+              {el.content || "Link"}
+            </a>
+          )}
+          {el.type === "form" && (
+            <form id={`element-${el.id}`} className="w-full h-full p-2" style={contentStyle}>
+              <input type="text" placeholder={el.content || "Form Input"} className="w-full p-2 border rounded" />
+              <button type="submit" className="mt-2 px-3 py-1 bg-blue-600 text-white rounded">
+                Submit
+              </button>
+            </form>
+          )}
+          {el.type === "input" && (
             <input
               type="text"
-              value={el.content || ""}
-              onChange={(e) => updateElement(currentPageId!, el.id, { content: e.target.value })}
-              onBlur={() => setSelectedElement(el)}
-              onKeyPress={(e) => e.key === "Enter" && setSelectedElement(el)}
-              className="w-full h-full px-2 py-1 border-none bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              placeholder={el.content || "Input"}
+              className="w-full h-full p-2 focus:outline-none focus:border-blue-500"
               style={contentStyle}
-              autoFocus
+              readOnly={previewMode}
             />
-          )
-        ) : (
-          <>
-            {el.type === "text" && (
-              <div className="w-full h-full px-2 py-1" style={{ ...contentStyle, display: "block" }}>
-                {el.content || "Sample Text"}
-              </div>
-            )}
-            {el.type === "button" && (
-              <button className="w-full h-full flex items-center justify-center" style={contentStyle}>
-                {el.content || "Click Me"}
+          )}
+          {el.type === "header" && (
+            <header className="w-full h-full p-2 flex items-center justify-between" style={contentStyle}>
+              <span>{el.content || "Header"}</span>
+              <div className="text-sm opacity-70">Subtitle</div>
+            </header>
+          )}
+          {el.type === "footer" && (
+            <footer className="w-full h-full p-2 flex items-center justify-between" style={contentStyle}>
+              <span>{el.content || "Footer"}</span>
+              <div className="text-sm opacity-70">© 2025</div>
+            </footer>
+          )}
+          {el.type === "card" && (
+            <div className="w-full h-full p-3 flex flex-col" style={contentStyle}>
+              <div>{el.content || "Card Content"}</div>
+              <div className="mt-1 text-sm opacity-70 flex-1">Description</div>
+              <button className="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 self-end">Action</button>
+            </div>
+          )}
+          {el.type === "carousel" && (
+            <div className="w-full h-full flex overflow-x-auto snap-x snap-mandatory" style={contentStyle}>
+              {(el.content || "https://via.placeholder.com/150").split(",").map((url, i) => (
+                <img key={i} src={url.trim()} alt={`Slide ${i}`} className="h-full object-cover flex-shrink-0 snap-center" />
+              ))}
+            </div>
+          )}
+          {el.type === "accordion" && (
+            <div className="w-full h-full" style={contentStyle}>
+              <div className="p-2 border-b">{el.content || "Accordion Title"}</div>
+              <div className="p-2 opacity-70">Content</div>
+            </div>
+          )}
+          {el.type === "modal" && (
+            <div className="w-full h-full p-3 flex flex-col" style={contentStyle}>
+              <div>{el.content || "Modal Title"}</div>
+              <div className="mt-1 flex-1 opacity-70">Content</div>
+              <button
+                className="self-end mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={() => updateElement(currentPageId!, el.id, { style: { ...el.style, display: "none" } })}
+              >
+                Close
               </button>
-            )}
-            {el.type === "rectangle" && <div className="w-full h-full" style={contentStyle} />}
-            {el.type === "nav" && (
-              <nav className="w-full h-full flex items-center justify-around" style={contentStyle}>
-                {(el.content || "Home,About,Contact").split(",").map((item, i) => (
-                  <span key={i} className="px-3 py-1 hover:bg-gray-700/20 rounded">
-                    {item}
-                  </span>
-                ))}
-              </nav>
-            )}
-            {el.type === "image" && (
-              <img
-                src={el.content || "https://via.placeholder.com/250"}
-                alt="Image"
-                className="w-full h-full object-cover"
-                style={contentStyle}
-              />
-            )}
-            {el.type === "container" && <div className="w-full h-full" style={contentStyle} />}
-            {el.type === "bottomSheet" && (
-              <div className="w-full h-full rounded-t-lg p-2 flex flex-col" style={contentStyle}>
-                <div>{el.content || "Bottom Sheet"}</div>
-                <div className="mt-1 flex-1">Content</div>
-              </div>
-            )}
-            {el.type === "radio" && (
-              <input
-                type="radio"
-                className="w-full h-full accent-blue-600"
-                checked={el.content === "checked"}
-                style={contentStyle}
-              />
-            )}
-            {el.type === "link" && (
-              <a href={el.content || "#"} className="w-full h-full flex items-center justify-center hover:underline" style={contentStyle}>
-                {el.content || "Link"}
-              </a>
-            )}
-            {el.type === "form" && (
-              <form id={`element-${el.id}`} className="w-full h-full p-2" style={contentStyle}>
-                <input type="text" placeholder={el.content || "Form Input"} className="w-full p-2 border rounded" />
-                <button type="submit" className="mt-2 px-3 py-1 bg-blue-600 text-white rounded">
-                  Submit
-                </button>
-              </form>
-            )}
-            {el.type === "input" && (
-              <input
-                type="text"
-                placeholder={el.content || "Input"}
-                className="w-full h-full p-2 focus:outline-none focus:border-blue-500"
-                style={contentStyle}
-                readOnly={previewMode}
-              />
-            )}
-            {el.type === "header" && (
-              <header className="w-full h-full p-2 flex items-center justify-between" style={contentStyle}>
-                <span>{el.content || "Header"}</span>
-                <div className="text-sm opacity-70">Subtitle</div>
-              </header>
-            )}
-            {el.type === "footer" && (
-              <footer className="w-full h-full p-2 flex items-center justify-between" style={contentStyle}>
-                <span>{el.content || "Footer"}</span>
-                <div className="text-sm opacity-70">© 2025</div>
-              </footer>
-            )}
-            {el.type === "card" && (
-              <div className="w-full h-full p-3 flex flex-col" style={contentStyle}>
-                <div>{el.content || "Card Content"}</div>
-                <div className="mt-1 text-sm opacity-70 flex-1">Description</div>
-                <button className="mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 self-end">
-                  Action
-                </button>
-              </div>
-            )}
-            {el.type === "carousel" && (
-              <div className="w-full h-full flex overflow-x-auto snap-x snap-mandatory" style={contentStyle}>
-                {(el.content || "https://via.placeholder.com/150").split(",").map((url, i) => (
-                  <img
-                    key={i}
-                    src={url.trim()}
-                    alt={`Slide ${i}`}
-                    className="h-full object-cover flex-shrink-0 snap-center"
-                  />
+            </div>
+          )}
+          {el.type === "tabs" && (
+            <div className="w-full h-full" style={contentStyle}>
+              <div className="flex border-b">
+                {(el.content || "Tab 1,Tab 2").split(",").map((tab, i) => (
+                  <div key={i} className="px-3 py-1 border-r hover:bg-gray-100/50">
+                    {tab}
+                  </div>
                 ))}
               </div>
-            )}
-            {el.type === "accordion" && (
-              <div className="w-full h-full" style={contentStyle}>
-                <div className="p-2 border-b">{el.content || "Accordion Title"}</div>
-                <div className="p-2 opacity-70">Content</div>
-              </div>
-            )}
-            {el.type === "modal" && (
-              <div className="w-full h-full p-3 flex flex-col" style={contentStyle}>
-                <div>{el.content || "Modal Title"}</div>
-                <div className="mt-1 flex-1 opacity-70">Content</div>
-                <button
-                  className="self-end mt-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  onClick={() => updateElement(currentPageId!, el.id, { style: { ...el.style, display: "none" } })}
-                >
-                  Close
-                </button>
-              </div>
-            )}
-            {el.type === "tabs" && (
-              <div className="w-full h-full" style={contentStyle}>
-                <div className="flex border-b">
-                  {(el.content || "Tab 1,Tab 2").split(",").map((tab, i) => (
-                    <div key={i} className="px-3 py-1 border-r hover:bg-gray-100/50">
-                      {tab}
-                    </div>
-                  ))}
-                </div>
-                <div className="p-2 opacity-70">Content</div>
-              </div>
-            )}
-            {el.type === "video" && (
-              <video
-                id={`element-${el.id}`}
-                src={el.content || "https://www.w3schools.com/html/mov_bbb.mp4"}
-                controls
-                className="w-full h-full object-cover"
-                style={contentStyle}
-              />
-            )}
-            {el.type === "divider" && (
-              <hr className="w-full" style={{ borderColor: contentStyle.backgroundColor || "#d1d5db", height: el.height }} />
-            )}
-            {el.type === "progress" && (
-              <progress
-                value={parseInt(el.content || "50")}
-                max="100"
-                className="w-full h-full"
-                style={{
-                  backgroundColor: contentStyle.backgroundColor || "#e5e7eb",
-                  color: "#3b82f6",
-                  borderRadius: contentStyle.borderRadius,
-                }}
-              />
-            )}
-            {el.type === "icon" && (
-              IconComponent ? (
-                <IconComponent className="w-full h-full" style={contentStyle} />
-              ) : (
-                <span className="w-full h-full flex items-center justify-center text-red-500 text-sm">
-                  Icon: {el.content || "none"}
-                </span>
-              )
-            )}
-            {el.type === "table" && (
-              <table className="w-full h-full border-collapse" style={contentStyle}>
-                <thead>
-                  <tr style={{ backgroundColor: contentStyle.backgroundColor ? `${contentStyle.backgroundColor}20` : "#f9fafb" }}>
-                    <th className="border p-2">Header 1</th>
-                    <th className="border p-2">Header 2</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border p-2 opacity-70">{el.content || "Cell 1"}</td>
-                    <td className="border p-2 opacity-70">Cell 2</td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-            {el.type === "social" && (
-              <div className="w-full h-full flex items-center justify-around" style={contentStyle}>
-                {(el.content || "facebook,twitter").split(",").map((platform, i) => (
-                  <a
-                    key={i}
-                    href={`https://${platform}.com`}
-                    className="flex items-center gap-1 hover:underline"
-                    style={{ color: contentStyle.color }}
-                  >
-                    <FaIcons.FaLink className="w-4 h-4" />
-                    {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                  </a>
-                ))}
-              </div>
-            )}
-            {el.type === "map" && (
-              <iframe
-                src={el.content || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3151.835434509368!2d144.9537353153167!3d-37.81627997975146!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6ad642af0f11fd81%3A0xf0727d7a9b5d8e0!2sMelbourne%20VIC%2C%20Australia!5e0!3m2!1sen!2sus!4v1635789271533!5m2!1sen!2sus"}
-                className="w-full h-full border-0"
-                style={contentStyle}
-                allowFullScreen
-              />
-            )}
-            {["container", "button", "rectangle", "text", "image", "form", "header", "footer", "card", "carousel", "modal", "tabs", "video", "table", "map", "nav", "accordion", "input", "social", "progress"].includes(el.type) && !el.isLocked && !previewMode && (
+              <div className="p-2 opacity-70">Content</div>
+            </div>
+          )}
+          {el.type === "video" && (
+            <video id={`element-${el.id}`} src={el.content || "https://www.w3schools.com/html/mov_bbb.mp4"} controls className="w-full h-full object-cover" style={contentStyle} />
+          )}
+          {el.type === "divider" && (
+            <hr className="w-full" style={{ borderColor: contentStyle.backgroundColor || "#d1d5db", height: el.height }} />
+          )}
+          {el.type === "progress" && (
+            <progress
+              value={parseInt(el.content || "50")}
+              max="100"
+              className="w-full h-full"
+              style={{ backgroundColor: contentStyle.backgroundColor || "#e5e7eb", color: "#3b82f6", borderRadius: contentStyle.borderRadius }}
+            />
+          )}
+          {el.type === "icon" && (
+            IconComponent ? (
+              <IconComponent className="w-full h-full" style={contentStyle} />
+            ) : (
+              <span className="w-full h-full flex items-center justify-center text-red-500 text-sm">Icon: {el.content || "none"}</span>
+            )
+          )}
+          {el.type === "table" && (
+            <table className="w-full h-full border-collapse" style={contentStyle}>
+              <thead>
+                <tr style={{ backgroundColor: contentStyle.backgroundColor ? `${contentStyle.backgroundColor}20` : "#f9fafb" }}>
+                  <th className="border p-2">Header 1</th>
+                  <th className="border p-2">Header 2</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border p-2 opacity-70">{el.content || "Cell 1"}</td>
+                  <td className="border p-2 opacity-70">Cell 2</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+          {el.type === "social" && (
+            <div className="w-full h-full flex items-center justify-around" style={contentStyle}>
+              {(el.content || "facebook,twitter").split(",").map((platform, i) => (
+                <a key={i} href={`https://${platform}.com`} className="flex items-center gap-1 hover:underline" style={{ color: contentStyle.color }}>
+                  <FaIcons.FaLink className="w-4 h-4" />
+                  {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                </a>
+              ))}
+            </div>
+          )}
+          {el.type === "map" && (
+            <iframe
+              src={el.content || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3151.835434509368!2d144.9537353153167!3d-37.81627997975146!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6ad642af0f11fd81%3A0xf0727d7a9b5d8e0!2sMelbourne%20VIC%2C%20Australia!5e0!3m2!1sen!2sus!4v1635789271533!5m2!1sen!2sus"}
+              className="w-full h-full border-0"
+              style={contentStyle}
+              allowFullScreen
+            />
+          )}
+          {el.type === "horizontalScroller" && (
+            <HorizontalScroller
+              el={el}
+              previewMode={previewMode}
+              currentPageId={currentPageId}
+              updateElement={updateElement}
+              handleDrop={handleDrop}
+            >
+              {children}
+            </HorizontalScroller>
+          )}
+          {["container", "button", "rectangle", "text", "image", "form", "header", "footer", "card", "carousel", "modal", "tabs", "video", "table", "map", "nav", "accordion", "input", "social", "progress", "horizontalScroller"].includes(el.type) &&
+            !el.isLocked &&
+            !previewMode && (
               <div className="absolute inset-0 pointer-events-none group-hover:pointer-events-auto">
                 <div
                   className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-transparent hover:bg-blue-200/50"
@@ -833,245 +961,289 @@ export function Canvas({ isPanning }: { isPanning: boolean }) {
                 />
               </div>
             )}
-            {el.isLocked && (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11V7m0 10h.01M16 12h-8" />
-                </svg>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
+          {el.isLocked && (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11V7m0 10h.01M16 12h-8" />
+              </svg>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
-  useEffect(() => {
-    if (previewMode && currentPageId) {
-      currentPage.elements.forEach((el) => {
-        if (el.prototype?.onLoad) {
-          handlePrototypeAction("onLoad", el);
-        }
-      });
+useEffect(() => {
+  if (previewMode && currentPageId && !hasRunOnLoadRef.current) {
+    const elementsWithOnLoad = currentPage.elements.filter((el) => el.prototype?.onLoad);
+    elementsWithOnLoad.forEach((el) => handlePrototypeAction("onLoad", el));
+    if (componentBuilderMode && currentPage.prototype?.onLoad) {
+      handlePrototypeAction("onLoad");
     }
-  }, [previewMode, currentPageId, currentPage.elements, handlePrototypeAction]);
+    hasRunOnLoadRef.current = true;
+  } else if (!previewMode) {
+    hasRunOnLoadRef.current = false;
+  }
+}, [previewMode, currentPageId, componentBuilderMode, currentPage, handlePrototypeAction]);
 
-  // Reset tooltip when page changes
-  useEffect(() => {
-    setTooltip(null);
-  }, [currentPageId]);
+useEffect(() => {
+  setTooltip(null);
+}, [currentPageId]);
 
-  return (
-    <div ref={canvasRef} className="flex-1 relative bg-gray-100 overflow-auto" style={{ height: "100vh" }}>
-      {!currentPageId ? (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-500">Select or create a page to start</div>
-      ) : (
-        <div className="relative flex justify-center">
-          <div
-            ref={frameRef}
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseDown={(e) => handleMouseDown(e)}
-            onClick={(e) => {
-              if (e.target === frameRef.current) {
-                setSelectedIds([]);
-                setSelectedElement(null);
+useEffect(() => {
+  return () => {
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+  };
+}, []);
+
+useEffect(() => {
+  if (componentBuilderMode && !previewMode && canvasRef.current && frameRef.current) {
+    const canvas = canvasRef.current;
+    const frame = frameRef.current;
+
+    const frameRect = frame.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+
+    const scrollLeft = frameRect.left - canvasRect.left + canvas.scrollLeft - (canvas.clientWidth - frameRect.width) / 2;
+    const scrollTop = frameRect.top - canvasRect.top + canvas.scrollTop - 50;
+
+    canvas.scrollTo({
+      left: Math.max(0, scrollLeft),
+      top: Math.max(0, scrollTop),
+      behavior: "smooth",
+    });
+  }
+}, [componentBuilderMode, previewMode, zoom, currentPage.frameHeight]);
+
+return (
+  <div ref={canvasRef} className="flex-1 relative bg-gray-100 overflow-auto" style={{ height: "100vh" }}>
+    {!currentPageId ? (
+      <div className="absolute inset-0 flex items-center justify-center text-gray-500">Select or create a page to start</div>
+    ) : (
+      <div
+        className="relative"
+        style={{
+          width: componentBuilderMode && !previewMode ? `${INFINITE_WIDTH}px` : `${FRAME_WIDTH}px`,
+          height: componentBuilderMode && !previewMode ? `${INFINITE_HEIGHT}px` : "auto",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          overflow: "visible",
+          margin: "0 auto",
+          backgroundColor: componentBuilderMode && !previewMode ? "rgba(0, 255, 0, 0.1)" : "transparent",
+        }}
+      >
+        <div
+          ref={frameRef}
+          onDrop={(e) => handleDrop(e)}
+          onDragOver={(e) => e.preventDefault()}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseDown={(e) => handleMouseDown(e)}
+          onClick={(e) => {
+            if (e.target === frameRef.current) {
+              setSelectedIds([]);
+              setSelectedElement(null);
+            }
+            closeContextMenu();
+          }}
+          className={`relative rounded-lg ${isPanning ? "cursor-grab" : ""}`}
+          style={{
+            width: `${FRAME_WIDTH}px`,
+            height: `${currentPage.frameHeight ?? 800}px`,
+            backgroundColor: componentBuilderMode ? "#f3e8ff" : currentPage.backgroundColor,
+            backgroundImage: currentPage.backgroundImage ? `url(${currentPage.backgroundImage})` : undefined,
+            backgroundSize: "cover",
+            transform: `scale(${zoom})`,
+            transformOrigin: "top center",
+            margin: previewMode ? "20px auto" : "50px auto",
+            position: "relative",
+            border: "1px solid #ccc",
+            boxShadow: previewMode ? "none" : "0 2px 4px rgba(0, 0, 0, 0.1)",
+            overflow: previewMode ? "hidden" : "visible",
+          }}
+        >
+          {!previewMode && showGrid && (
+            <div
+              className="absolute inset-0 pointer-events-none opacity-20"
+              style={
+                layoutMode === "grid"
+                  ? {
+                      backgroundImage: `
+                        linear-gradient(to right, rgba(255, 0, 0, 0.3) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255, 0, 0, 0.3) 1px, transparent 1px)
+                      `,
+                      backgroundSize: `${gridSize}px ${gridSize}px`,
+                    }
+                  : {
+                      backgroundImage: `linear-gradient(to right, rgba(255, 0, 0, 0.3) 1px, transparent 1px)`,
+                      backgroundSize: `100px 100%`,
+                    }
               }
-              closeContextMenu();
-            }}
-            className={`relative bg-white rounded-lg ${isPanning ? "cursor-grab" : ""}`}
-            style={{
-              width: `${FRAME_WIDTH}px`,
-              height: `${currentPage.frameHeight ?? 800}px`,
-              backgroundColor: currentPage.backgroundColor,
-              backgroundImage: currentPage.backgroundImage ? `url(${currentPage.backgroundImage})` : undefined,
-              backgroundSize: "cover",
-              transform: `scale(${zoom})`,
-              transformOrigin: "top center",
-              marginTop: "50px",
-              marginLeft: "auto",
-              marginRight: "auto",
-              marginBottom: `${INFINITE_HEIGHT / 2}px`,
-            }}
-          >
-            {!previewMode && showGrid && (
+            />
+          )}
+          {!previewMode &&
+            guides.map((guide) => (
               <div
-                className="absolute inset-0 pointer-events-none opacity-20"
-                style={
-                  layoutMode === "grid"
-                    ? {
-                        backgroundImage: `
-                          linear-gradient(to right, rgba(255, 0, 0, 0.3) 1px, transparent 1px),
-                          linear-gradient(to bottom, rgba(255, 0, 0, 0.3) 1px, transparent 1px)
-                        `,
-                        backgroundSize: `${gridSize}px ${gridSize}px`,
-                      }
-                    : {
-                        backgroundImage: `linear-gradient(to right, rgba(255, 0, 0, 0.3) 1px, transparent 1px)`,
-                        backgroundSize: `100px 100%`,
-                      }
-                }
-              />
-            )}
-            {!previewMode &&
-              guides.map((guide) => (
-                <div
-                  key={guide.id}
-                  className={`absolute ${
-                    guide.type.includes("center")
-                      ? "bg-blue-400"
-                      : guide.type.includes("spacing-x-inside") || guide.type.includes("spacing-y-inside")
-                      ? "bg-green-400"
-                      : guide.type.includes("spacing")
-                      ? "bg-purple-400"
-                      : "bg-red-400"
-                  }`}
-                  style={{
-                    left: guide.x !== undefined ? Math.min(guide.x, guide.to || guide.x) : 0,
-                    top: guide.y !== undefined ? Math.min(guide.y, guide.to || guide.y) : 0,
-                    width: guide.x !== undefined ? (guide.to ? Math.abs(guide.to - guide.x) : "1px") : "100%",
-                    height: guide.y !== undefined ? (guide.to ? Math.abs(guide.to - guide.y) : "1px") : "100%",
-                    zIndex: 9999,
-                  }}
-                >
-                  {guide.distance !== undefined && (
-                    <span
-                      className="absolute text-xs bg-gray-800 text-white px-1 rounded"
-                      style={{
-                        left: guide.x !== undefined ? (guide.to ? (guide.to > guide.x ? "100%" : "-100%") : "100%") : "50%",
-                        top: guide.y !== undefined ? (guide.to ? (guide.to > guide.y ? "100%" : "-100%") : "100%") : "50%",
-                        transform: guide.x !== undefined ? "translate(4px, -50%)" : "translate(-50%, 4px)",
-                      }}
-                    >
-                      {Math.round(guide.distance)}px
-                    </span>
-                  )}
-                </div>
-              ))}
-            {currentPage.elements.map((el) => renderElement(el))}
-            {!previewMode && (
-              <div className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200/50" onMouseDown={handleFrameResize} />
-            )}
-            {!previewMode && selectionBox && (
-              <div
-                className="absolute border border-dashed border-blue-500 bg-blue-100/10 pointer-events-none"
+                key={guide.id}
+                className={`absolute ${
+                  guide.type.includes("center")
+                    ? "bg-blue-400"
+                    : guide.type.includes("spacing-x-inside") || guide.type.includes("spacing-y-inside")
+                    ? "bg-green-400"
+                    : guide.type.includes("spacing")
+                    ? "bg-purple-400"
+                    : "bg-red-400"
+                }`}
                 style={{
-                  left: Math.min(selectionBox.startX, selectionBox.endX) / zoom,
-                  top: Math.min(selectionBox.startY, selectionBox.endY) / zoom,
-                  width: Math.abs(selectionBox.endX - selectionBox.startX) / zoom,
-                  height: Math.abs(selectionBox.endY - selectionBox.startY) / zoom,
+                  left: guide.x !== undefined ? Math.min(guide.x, guide.to || guide.x) : 0,
+                  top: guide.y !== undefined ? Math.min(guide.y, guide.to || guide.y) : 0,
+                  width: guide.x !== undefined ? (guide.to ? Math.abs(guide.to - guide.x) : "1px") : "100%",
+                  height: guide.y !== undefined ? (guide.to ? Math.abs(guide.to - guide.y) : "1px") : "100%",
+                  zIndex: 9999,
                 }}
-              />
-            )}
-            {contextMenu && !previewMode && (
-              <div
-                className="absolute bg-white rounded border border-gray-200 p-1 z-50 shadow-lg"
-                style={{ left: contextMenu.x / zoom, top: contextMenu.y / zoom }}
               >
-                <button
-                  onClick={() => {
-                    duplicateElement(currentPageId!, contextMenu.element.id);
-                    closeContextMenu();
-                  }}
-                  className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                >
-                  Duplicate
-                </button>
-                <button
-                  onClick={() => {
-                    deleteElement(currentPageId!, contextMenu.element.id);
-                    closeContextMenu();
-                  }}
-                  className="block w-full text-left px-2 py-1 hover:bg-red-50 text-red-500 rounded"
-                >
-                  Delete
-                </button>
-                <button
-                  onClick={() => {
-                    moveElementToLayer(currentPageId!, contextMenu.element.id, "top");
-                    closeContextMenu();
-                  }}
-                  className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                >
-                  Bring to Front
-                </button>
-                <button
-                  onClick={() => {
-                    moveElementToLayer(currentPageId!, contextMenu.element.id, "bottom");
-                    closeContextMenu();
-                  }}
-                  className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                >
-                  Send to Back
-                </button>
-                <button
-                  onClick={() => {
-                    updateElement(currentPageId!, contextMenu.element.id, { isLocked: !contextMenu.element.isLocked });
-                    closeContextMenu();
-                  }}
-                  className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                >
-                  {contextMenu.element.isLocked ? "Unlock" : "Lock"}
-                </button>
-                {selectedIds.length > 1 && (
-                  <>
+                {guide.distance !== undefined && (
+                  <span
+                    className="absolute text-xs bg-gray-800 text-white px-1 rounded"
+                    style={{
+                      left: guide.x !== undefined ? (guide.to ? (guide.to > guide.x ? "100%" : "-100%") : "100%") : "50%",
+                      top: guide.y !== undefined ? (guide.to ? (guide.to > guide.y ? "100%" : "-100%") : "100%") : "50%",
+                      transform: guide.x !== undefined ? "translate(4px, -50%)" : "translate(-50%, 4px)",
+                    }}
+                  >
+                    {Math.round(guide.distance)}px
+                  </span>
+                )}
+              </div>
+            ))}
+          {currentPage.elements.filter((el) => !el.parentId).map((el) => renderElement(el))}
+          {!previewMode && (
+            <div className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200/50" onMouseDown={handleFrameResize} />
+          )}
+          {!previewMode && selectionBox && (
+            <div
+              className="absolute border border-dashed border-blue-500 bg-blue-100/10 pointer-events-none"
+              style={{
+                left: Math.min(selectionBox.startX, selectionBox.endX) / zoom,
+                top: Math.min(selectionBox.startY, selectionBox.endY) / zoom,
+                width: Math.abs(selectionBox.endX - selectionBox.startX) / zoom,
+                height: Math.abs(selectionBox.endY - selectionBox.startY) / zoom,
+              }}
+            />
+          )}
+          {contextMenu && !previewMode && (
+            <div
+              className="absolute bg-white rounded border border-gray-200 p-1 z-50 shadow-lg"
+              style={{ left: contextMenu.x / zoom, top: contextMenu.y / zoom }}
+            >
+              {!componentBuilderMode && (
+                <>
+                  <button
+                    onClick={() => {
+                      duplicateElement(currentPageId!, contextMenu.element.id);
+                      closeContextMenu();
+                    }}
+                    className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={() => {
+                      deleteElement(currentPageId!, contextMenu.element.id);
+                      closeContextMenu();
+                    }}
+                    className="block w-full text-left px-2 py-1 hover:bg-red-50 text-red-500 rounded"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => {
+                      moveElementToLayer(currentPageId!, contextMenu.element.id, "top");
+                      closeContextMenu();
+                    }}
+                    className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                  >
+                    Bring to Front
+                  </button>
+                  <button
+                    onClick={() => {
+                      moveElementToLayer(currentPageId!, contextMenu.element.id, "bottom");
+                      closeContextMenu();
+                    }}
+                    className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                  >
+                    Send to Back
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateElement(currentPageId!, contextMenu.element.id, { isLocked: !contextMenu.element.isLocked });
+                      closeContextMenu();
+                    }}
+                    className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                  >
+                    {contextMenu.element.isLocked ? "Unlock" : "Lock"}
+                  </button>
+                  {selectedIds.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => {
+                          groupElements(currentPageId!, selectedIds);
+                          setSelectedIds([]);
+                          closeContextMenu();
+                        }}
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                      >
+                        Group
+                      </button>
+                      <button
+                        onClick={() => {
+                          distributeElements("horizontal");
+                          closeContextMenu();
+                        }}
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                      >
+                        Distribute Horizontally
+                      </button>
+                      <button
+                        onClick={() => {
+                          distributeElements("vertical");
+                          closeContextMenu();
+                        }}
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+                      >
+                        Distribute Vertically
+                      </button>
+                    </>
+                  )}
+                  {contextMenu.element.type === "container" && (
                     <button
                       onClick={() => {
-                        groupElements(currentPageId!, selectedIds);
+                        ungroupElements(currentPageId!, contextMenu.element.id);
                         setSelectedIds([]);
                         closeContextMenu();
                       }}
                       className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
                     >
-                      Group
+                      Ungroup
                     </button>
-                    <button
-                      onClick={() => {
-                        distributeElements("horizontal");
-                        closeContextMenu();
-                      }}
-                      className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                    >
-                      Distribute Horizontally
-                    </button>
-                    <button
-                      onClick={() => {
-                        distributeElements("vertical");
-                        closeContextMenu();
-                      }}
-                      className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                    >
-                      Distribute Vertically
-                    </button>
-                  </>
-                )}
-                {contextMenu.element.type === "container" && (
-                  <button
-                    onClick={() => {
-                      ungroupElements(currentPageId!, contextMenu.element.id);
-                      setSelectedIds([]);
-                      closeContextMenu();
-                    }}
-                    className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
-                  >
-                    Ungroup
-                  </button>
-                )}
-              </div>
-            )}
-            {tooltip && previewMode && (
-              <div
-                className="absolute bg-gray-800 text-white text-sm px-2 py-1 rounded shadow-lg z-50"
-                style={{ left: tooltip.x / zoom + 10, top: tooltip.y / zoom + 10 }}
-              >
-                {tooltip.text}
-              </div>
-            )}
-          </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {tooltip && previewMode && (
+            <div
+              className="absolute bg-gray-800 text-white text-sm px-2 py-1 rounded shadow-lg z-50"
+              style={{ left: tooltip.x / zoom + 10, top: tooltip.y / zoom + 10 }}
+            >
+              {tooltip.text}
+            </div>
+          )}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 }

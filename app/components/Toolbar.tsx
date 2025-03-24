@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useBuilderStore } from "@/app/lib/store";
 import {
-  FaSave,
   FaUndo,
   FaRedo,
   FaRuler,
@@ -13,9 +13,11 @@ import {
   FaHandPaper,
   FaEye,
   FaPlay,
+  FaCube,
 } from "react-icons/fa";
 import { saveDesignOrTemplate } from "@/app/actions/saveTemplate";
 import { useRouter } from "next/navigation";
+import { debounce } from "lodash";
 
 export function Toolbar({
   canvasRef,
@@ -34,52 +36,147 @@ export function Toolbar({
     showGrid,
     previewMode,
     setPreviewMode,
+    componentBuilderMode,
+    toggleComponentBuilderMode,
+    componentElementIds,
+    currentPageId,
+    currentDesignId,
+    setCurrentDesignId,
+    addCustomComponent,
+    designTitle, // New: from store
+    setDesignTitle, // New: from store
   } = useBuilderStore();
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [isPanningLocal, setIsPanningLocal] = useState(false);
-  const [saveOption, setSaveOption] = useState<"none" | "design" | "template">("none");
-  const [designName, setDesignName] = useState("");
-  const [templateName, setTemplateName] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [componentName, setComponentName] = useState(""); // Kept for component save
   const router = useRouter();
 
+  const isNewDesign = window.location.pathname === "/builder/design";
+  const isNewTemplate = window.location.pathname === "/builder/template";
+  const saveAsDefault = isNewTemplate ? "template" : "design"; // Default based on route
+
+  // Debounced auto-save function for designs/templates
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const autoSave = useCallback(
+    debounce(async (pagesData: typeof pages, designId: string | null, title: string) => {
+      if (previewMode || componentBuilderMode) return; // Skip auto-save in preview or component mode
+
+      const urlDesignId = window.location.pathname.split("/")[2];
+      const effectiveDesignId = designId || (urlDesignId !== "design" && urlDesignId !== "template" ? urlDesignId : null);
+
+      const result = await saveDesignOrTemplate({
+        pages: pagesData,
+        title: saveAsDefault === "design" ? title : undefined,
+        name: saveAsDefault === "template" ? title : undefined,
+        saveAs: saveAsDefault,
+        designId: effectiveDesignId || undefined,
+      });
+
+      if (!result.success || !result.data) {
+        console.error(`Auto-save ${saveAsDefault} failed:`, result.error);
+        return;
+      }
+
+      if (!effectiveDesignId && result.data.id) {
+        setCurrentDesignId(result.data.id);
+        router.push(`/builder/${result.data.id}`);
+      }
+
+      console.log(`Auto-saved ${saveAsDefault} as ${result.data.id}`);
+    }, 1000),
+    [previewMode, componentBuilderMode, saveAsDefault, currentDesignId, router, setCurrentDesignId]
+  );
+
+  // Auto-save on pages or title change
   useEffect(() => {
-    setIsPanning(isPanningLocal);
-  }, [isPanningLocal, setIsPanning]);
+    if (pages.length > 0 && !componentBuilderMode) {
+      autoSave(pages, currentDesignId, designTitle || (saveAsDefault === "design" ? "Untitled Design" : "Untitled Template"));
+    }
+  }, [pages, designTitle, autoSave, currentDesignId, componentBuilderMode, saveAsDefault]);
 
-  const handleSave = async (formData: FormData) => {
-    const designId = window.location.pathname.split("/")[2];
-    const saveAs = formData.get("saveAs") as "design" | "template";
-    const dName = formData.get("designName") as string;
-    const tName = formData.get("templateName") as string;
-
-    const result = await saveDesignOrTemplate({
-      pages,
-      title: dName || "My Design",
-      name: saveAs === "template" ? (tName || `template-${Date.now()}`) : undefined,
-      saveAs,
-      designId: designId !== "newproject" && designId !== "demo" ? designId : undefined,
-    });
-
-    if (!result.success) {
-      console.error(`${saveAs} save failed:`, result.error);
-      alert(`Failed to save ${saveAs}: ${result.error}`);
+  // Manual save for components
+  const handleSaveComponent = async () => {
+    if (!componentName.trim()) {
+      alert("Please enter a component name.");
       return;
     }
 
-    alert(
-      `${saveAs.charAt(0).toUpperCase() + saveAs.slice(1)} saved as: ${
-        saveAs === "design" ? dName || "My Design" : tName || `template-${Date.now()}`
-      }`
-    );
-    if (saveAs === "design" && !designId && result.data) {
-      router.push(`/builder/${result.data.id}`);
+    const currentPage = pages.find((p) => p.id === currentPageId);
+    if (!currentPage) {
+      console.error("No current page found for component save.");
+      return;
     }
 
-    setSaveOption("none");
-    setDesignName("");
-    setTemplateName("");
+    let effectiveDesignId = currentDesignId;
+    if (!effectiveDesignId || effectiveDesignId === "design" || effectiveDesignId === "template") {
+      const designResult = await saveDesignOrTemplate({
+        saveAs: "design",
+        pages,
+        title: designTitle || "Untitled Design",
+      });
+      if (!designResult.success || !designResult.data) {
+        console.error("Failed to save design before component:", designResult.error);
+        return;
+      }
+      effectiveDesignId = designResult.data.id;
+      setCurrentDesignId(effectiveDesignId);
+      router.push(`/builder/${effectiveDesignId}`);
+    }
+
+    let elementsToSave = currentPage.elements;
+    if (componentElementIds.length > 0) {
+      elementsToSave = componentElementIds
+        .map((id) => {
+          const el = currentPage.elements.find((e) => e.id === id);
+          if (!el) return null;
+          return {
+            ...el,
+            x: el.x - Math.min(...componentElementIds.map((id) => currentPage.elements.find((e) => e.id === id)!.x)),
+            y: el.y - Math.min(...componentElementIds.map((id) => currentPage.elements.find((e) => e.id === id)!.y)),
+          };
+        })
+        .filter((el): el is typeof currentPage.elements[number] => el !== null);
+    }
+
+    if (elementsToSave.length === 0) {
+      console.error("No elements to save for component.");
+      return;
+    }
+
+    const result = await saveDesignOrTemplate({
+      saveAs: "component",
+      designId: effectiveDesignId,
+      name: componentName,
+      elements: elementsToSave,
+      pages,
+    });
+
+    if (!result.success || !result.data) {
+      console.error("Component save failed:", result.error);
+      return;
+    }
+
+    const componentData = result.data;
+    addCustomComponent({
+      id: componentData.id,
+      name: componentName,
+      elements: elementsToSave,
+      designId: effectiveDesignId,
+    });
+
+    alert(`Component saved as: ${componentName}`);
+    setComponentName("");
+    toggleComponentBuilderMode();
+  };
+
+  const handleTogglePanMode = () => {
+    setIsPanningLocal((prev) => {
+      const newValue = !prev;
+      setIsPanning(newValue);
+      return newValue;
+    });
   };
 
   const handleExport = () => {
@@ -88,7 +185,7 @@ export function Toolbar({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "design.json";
+    a.download = `${designTitle || "design"}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -111,25 +208,14 @@ export function Toolbar({
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleScrollTo = () => {
-    if (canvasRef.current) {
-      canvasRef.current.scrollTo({ top: scrollY, left: scrollX, behavior: "smooth" });
-    }
-  };
-
-  const togglePanMode = () => {
-    setIsPanningLocal((prev) => !prev);
-  };
-
   const togglePreviewMode = () => {
     setPreviewMode(!previewMode);
+    if (componentBuilderMode) toggleComponentBuilderMode();
   };
 
-  const isSaveButtonVisible = () => {
-    if (saveOption === "design") return designName.trim() !== "";
-    if (saveOption === "template") return templateName.trim() !== "";
-    return false;
+  const handleToggleComponentBuilderMode = () => {
+    toggleComponentBuilderMode();
+    if (previewMode) setPreviewMode(false);
   };
 
   const handleLogoContextMenu = (e: React.MouseEvent) => {
@@ -215,7 +301,7 @@ export function Toolbar({
         </button>
         <span className="text-sm">{Math.round(zoom * 100)}%</span>
         <button
-          onClick={togglePanMode}
+          onClick={handleTogglePanMode}
           className={`p-2 ${isPanningLocal ? "bg-gray-600" : "hover:bg-gray-600"} rounded transition-colors`}
           title="Pan Mode"
         >
@@ -229,59 +315,39 @@ export function Toolbar({
           className={`p-2 ${previewMode ? "bg-blue-600" : "hover:bg-gray-600"} rounded transition-colors`}
           title={previewMode ? "Switch to Design Mode" : "Switch to Preview Mode"}
         >
-          <FaPlay /> {previewMode ? "" : ""}
+          <FaPlay />
         </button>
-        
+        <button
+          onClick={handleToggleComponentBuilderMode}
+          className={`p-2 ${componentBuilderMode ? "bg-purple-600" : "hover:bg-gray-600"} rounded transition-colors`}
+          title={componentBuilderMode ? "Exit Component Builder" : "Enter Component Builder"}
+        >
+          <FaCube />
+        </button>
         <button onClick={handleExport} className="p-2 hover:bg-gray-600 rounded transition-colors" title="Export Design">
           <FaDownload />
         </button>
         <button onClick={handleShare} className="p-2 hover:bg-gray-600 rounded transition-colors" title="Share Design">
           <FaShareAlt />
         </button>
-        <form action={handleSave} className="flex items-center gap-3">
-          <select
-            name="saveAs"
-            value={saveOption}
-            onChange={(e) => {
-              setSaveOption(e.target.value as "none" | "design" | "template");
-              setDesignName("");
-              setTemplateName("");
-            }}
-            className="p-2 text-black rounded bg-gray-200 hover:bg-gray-300 transition-colors focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="none">Save As</option>
-            <option value="design">Save As Design</option>
-            <option value="template">Save As Template</option>
-          </select>
-          {saveOption === "design" && (
+        {componentBuilderMode && (
+          <div className="flex items-center gap-2">
             <input
               type="text"
-              name="designName"
-              value={designName}
-              onChange={(e) => setDesignName(e.target.value)}
-              placeholder="Design Name"
+              value={componentName}
+              onChange={(e) => setComponentName(e.target.value)}
+              placeholder="Component Name"
               className="p-2 text-black rounded bg-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-blue-500"
             />
-          )}
-          {saveOption === "template" && (
-            <input
-              type="text"
-              name="templateName"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Template Name"
-              className="p-2 text-black rounded bg-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-blue-500"
-            />
-          )}
-          {isSaveButtonVisible() && (
             <button
-              type="submit"
-              className="bg-green-500 px-4 py-2 rounded hover:bg-green-600 flex items-center gap-2 text-white font-semibold shadow-md transition-colors"
+              onClick={handleSaveComponent}
+              className="bg-green-500 px-4 py-2 rounded hover:bg-green-600 text-white font-semibold transition-colors"
+              disabled={!componentName.trim()}
             >
-              <FaSave /> Save
+              Save Component
             </button>
-          )}
-        </form>
+          </div>
+        )}
       </div>
     </div>
   );

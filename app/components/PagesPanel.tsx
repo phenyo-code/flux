@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBuilderStore } from "@/app/lib/store";
 import {
   FaPlus, FaTrash, FaLayerGroup, FaCopy, FaTextHeight, FaSquare, FaPlay, FaBars, FaImage, FaBox,
   FaChevronDown, FaCircle, FaLink, FaClipboard, FaPen, FaHome, FaShoePrints, FaCreditCard, FaImages,
-  FaWindowMaximize, FaFolderOpen, FaVideo, FaMinus, FaChartBar, FaStar, FaTable, FaShareAlt, FaMap
+  FaWindowMaximize, FaFolderOpen, FaVideo, FaMinus, FaChartBar, FaStar, FaTable, FaShareAlt, FaMap,
+  FaPuzzlePiece, FaArrowsAltH // Added for horizontalScroller
 } from "react-icons/fa";
 
 // Basic HTML-like elements
@@ -13,12 +14,11 @@ const elements = [
   { type: "text", label: "Text", icon: <FaTextHeight /> },
   { type: "button", label: "Button", icon: <FaPlay /> },
   { type: "input", label: "Input", icon: <FaPen /> },
-  { type: "link", label: "Link", icon: <FaLink /> },
   { type: "radio", label: "Radio Button", icon: <FaCircle /> },
   { type: "image", label: "Image", icon: <FaImage /> },
 ];
 
-// Complex components
+// Complex components (draggable defaults)
 const components = [
   { type: "rectangle", label: "Rectangle", icon: <FaSquare /> },
   { type: "nav", label: "Nav Bar", icon: <FaBars /> },
@@ -27,11 +27,7 @@ const components = [
   { type: "form", label: "Form", icon: <FaClipboard /> },
   { type: "header", label: "Header", icon: <FaHome /> },
   { type: "footer", label: "Footer", icon: <FaShoePrints /> },
-  { type: "card", label: "Card", icon: <FaCreditCard /> },
-  { type: "carousel", label: "Carousel", icon: <FaImages /> },
-  { type: "accordion", label: "Accordion", icon: <FaChevronDown /> },
   { type: "modal", label: "Modal", icon: <FaWindowMaximize /> },
-  { type: "tabs", label: "Tabs", icon: <FaFolderOpen /> },
   { type: "video", label: "Video", icon: <FaVideo /> },
   { type: "divider", label: "Divider", icon: <FaMinus /> },
   { type: "progress", label: "Progress Bar", icon: <FaChartBar /> },
@@ -39,6 +35,7 @@ const components = [
   { type: "table", label: "Table", icon: <FaTable /> },
   { type: "social", label: "Social Links", icon: <FaShareAlt /> },
   { type: "map", label: "Map", icon: <FaMap /> },
+  { type: "horizontalScroller", label: "Horizontal Scroller", icon: <FaArrowsAltH /> }, // Added horizontalScroller
 ];
 
 export function PagesPanel() {
@@ -53,11 +50,50 @@ export function PagesPanel() {
     deleteElement,
     duplicateElement,
     groupElements,
+    componentBuilderMode,
+    toggleComponentBuilderMode,
+    currentDesignId,
+    customComponents,
+    setCustomComponents,
   } = useBuilderStore();
   const [activeTab, setActiveTab] = useState<"pages" | "components" | "elements">("pages");
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const hasFetchedComponentsRef = useRef(false);
+
+  // Sync activeTab with componentBuilderMode
+  useEffect(() => {
+    if (componentBuilderMode) {
+      setActiveTab("elements");
+    } else {
+      setActiveTab("pages");
+    }
+  }, [componentBuilderMode]);
+
+  // Fetch custom components when currentDesignId changes
+  useEffect(() => {
+    if (!currentDesignId) return;
+
+    hasFetchedComponentsRef.current = false;
+
+    const fetchCustomComponents = async () => {
+      if (hasFetchedComponentsRef.current) return;
+
+      try {
+        const res = await fetch(`/api/components?designId=${currentDesignId}`);
+        if (!res.ok) throw new Error(`Failed to fetch components: ${res.status}`);
+        const data = await res.json();
+        setCustomComponents(data);
+        hasFetchedComponentsRef.current = true;
+      } catch (err) {
+        console.error("Failed to fetch custom components:", err);
+        setCustomComponents([]);
+      }
+    };
+
+    fetchCustomComponents();
+  }, [currentDesignId, setCustomComponents]);
 
   const handleRename = (pageId: string) => {
     if (newTitle.trim()) {
@@ -67,8 +103,13 @@ export function PagesPanel() {
     setNewTitle("");
   };
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, type: string) => {
-    e.dataTransfer.setData("type", type);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, typeOrComponent: string | { type: string; elements: any }) => {
+    if (typeof typeOrComponent === "string") {
+      e.dataTransfer.setData("type", typeOrComponent);
+    } else {
+      e.dataTransfer.setData("customComponent", JSON.stringify(typeOrComponent));
+    }
   };
 
   const filteredComponents = components.filter((comp) =>
@@ -77,13 +118,25 @@ export function PagesPanel() {
   const filteredElements = elements.filter((el) =>
     el.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredCustomComponents = customComponents.filter((comp) =>
+    comp.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="w-72 bg-gradient-to-b from-gray-100 to-gray-200 p-4 shrink-0 overflow-auto h-[calc(100vh-4rem)] shadow-lg">
+      <button
+        onClick={toggleComponentBuilderMode}
+        className={`w-full mb-4 p-2 rounded-lg font-medium ${componentBuilderMode ? "bg-purple-600 text-white" : "bg-gray-300 text-gray-700 hover:bg-gray-400"} transition-colors flex items-center justify-center gap-2`}
+      >
+        <FaPuzzlePiece />
+        {componentBuilderMode ? "Exit Component Builder" : "Build Component"}
+      </button>
+
       <div className="flex mb-4 rounded-lg overflow-hidden">
         <button
           onClick={() => setActiveTab("pages")}
           className={`flex-1 p-2 font-medium ${activeTab === "pages" ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-700 hover:bg-gray-400"} transition-colors`}
+          disabled={componentBuilderMode}
         >
           Pages
         </button>
@@ -101,7 +154,7 @@ export function PagesPanel() {
         </button>
       </div>
 
-      {activeTab === "pages" ? (
+      {activeTab === "pages" && !componentBuilderMode ? (
         <>
           <h2 className="text-lg font-bold mb-4 text-gray-800 flex items-center gap-2">
             Pages
@@ -234,18 +287,43 @@ export function PagesPanel() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full p-2 mb-4 border rounded-md focus:ring-2 focus:ring-blue-500"
           />
-          <div className="grid grid-cols-2 gap-2">
-            {filteredComponents.map((comp) => (
-              <div
-                key={comp.type}
-                draggable
-                onDragStart={(e) => handleDragStart(e, comp.type)}
-                className="p-2 bg-white rounded-lg shadow-md cursor-grab hover:bg-gray-50 flex items-center gap-2 transition-transform hover:scale-105"
-              >
-                {comp.icon}
-                <span>{comp.label}</span>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-md font-semibold mb-2">Default Components</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {filteredComponents.map((comp) => (
+                  <div
+                    key={comp.type}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, comp.type)}
+                    className="p-2 bg-white rounded-lg shadow-md cursor-grab hover:bg-gray-50 flex items-center gap-2 transition-transform hover:scale-105"
+                  >
+                    {comp.icon}
+                    <span>{comp.label}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <div>
+              <h3 className="text-md font-semibold mb-2">My Components</h3>
+              {filteredCustomComponents.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No custom components yet.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {filteredCustomComponents.map((comp) => (
+                    <div
+                      key={comp.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, { type: "custom", elements: comp.elements })}
+                      className="p-2 bg-white rounded-lg shadow-md cursor-grab hover:bg-gray-50 flex items-center gap-2 transition-transform hover:scale-105"
+                    >
+                      <FaPuzzlePiece />
+                      <span>{comp.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
