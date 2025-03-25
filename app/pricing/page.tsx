@@ -39,7 +39,7 @@ const PricingPage = () => {
           Pricing Plans
         </h2>
         <p className="text-lg text-gray-700 max-w-2xl mx-auto mb-12">
-          Whether you’re a solo creator, freelancer, or growing team, Flux has a plan to empower your vision.
+          Whether you’re a solo creator, freelancer, or growing team, Morph has a plan to empower your vision.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -47,7 +47,7 @@ const PricingPage = () => {
             title="Free"
             price="R0"
             subPrice="/month"
-            description="Perfect for exploring Flux and building your first projects."
+            description="Perfect for exploring Morph and building your first projects."
             features={[
               "Drag & Drop Builder",
               "Basic Components",
@@ -184,7 +184,7 @@ const PricingPage = () => {
         >
           <h3 className="text-3xl font-bold mb-4">Ready to Transform Your Workflow?</h3>
           <p className="text-lg mb-6 max-w-xl mx-auto">
-            Start with Flux today and see why creators trust us to bring their ideas to life.
+            Start with Morph today and see why creators trust us to bring their ideas to life.
           </p>
           <Link
             href="/signup"

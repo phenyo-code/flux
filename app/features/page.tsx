@@ -87,7 +87,7 @@ export default function Features() {
           variants={heroVariants}
         >
           <h1 className="text-4xl md:text-6xl font-extrabold mb-6">
-            Build Smarter with Flux Features
+            Build Smarter with Morph Features
           </h1>
           <p className="text-lg md:text-xl max-w-3xl mx-auto">
             Empower your creativity with a no-code platform packed with advanced tools for design, development, and growth.
@@ -96,7 +96,7 @@ export default function Features() {
             href="/signup"
             className="mt-8 inline-block bg-white text-blue-500 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-all"
           >
-            Try Flux Now
+            Try Morph Now
           </Link>
         </motion.div>
       </section>
@@ -104,7 +104,7 @@ export default function Features() {
       {/* Features Section */}
       <main className="container mx-auto py-20 px-6">
         <h2 className="text-4xl md:text-5xl font-bold text-gray-900 text-center mb-16">
-          Why Choose Flux?
+          Why Choose Morph?
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
@@ -139,7 +139,7 @@ export default function Features() {
               {
                 name: "Jane Doe",
                 role: "Freelance Designer",
-                quote: "Flux’s drag-and-drop builder saved me hours—my clients love the results!",
+                quote: "Morph’s drag-and-drop builder saved me hours—my clients love the results!",
               },
               {
                 name: "Mark Smith",
@@ -188,7 +188,7 @@ export default function Features() {
             transition={{ duration: 0.8, delay: 0.2 }}
             viewport={{ once: true }}
           >
-            Join a community of creators leveraging Flux to build faster and smarter.
+            Join a community of creators leveraging Morph to build faster and smarter.
           </motion.p>
           <motion.div
             initial={{ scale: 0.9 }}

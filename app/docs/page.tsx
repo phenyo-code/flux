@@ -58,7 +58,7 @@ export default function Docs() {
               <Link href="/" className="flex items-center">
                 <Image
                   src="/logo.png" // Replace with your actual logo path
-                  alt="Flux Logo"
+                  alt="Morph Logo"
                   width={120} // Adjust width as needed
                   height={40} // Adjust height as needed
                   className="hover:opacity-80 transition-opacity"
@@ -94,7 +94,7 @@ export default function Docs() {
             animate="visible"
             variants={contentVariants}
           >
-            Flux Documentation
+            Morph Documentation
           </motion.h2>
 
           <div className="prose text-gray-700">
@@ -123,7 +123,7 @@ export default function Docs() {
             >
               <h3 className="text-2xl font-semibold mb-4 mt-12">Getting Started</h3>
               <p>
-                Welcome to Flux! This guide will walk you through setting up your first project. Start by signing up or logging in via the <Link href="/signup" className="text-blue-500 hover:underline">Sign Up</Link> page, then head to <Link href="/projects" className="text-blue-500 hover:underline">Projects</Link> to create your app.
+                Welcome to Morph! This guide will walk you through setting up your first project. Start by signing up or logging in via the <Link href="/signup" className="text-blue-500 hover:underline">Sign Up</Link> page, then head to <Link href="/projects" className="text-blue-500 hover:underline">Projects</Link> to create your app.
               </p>
               <h4 className="text-xl font-medium mt-6 mb-2">Step 1: Create a Project</h4>
               <p>Click “New Project,” name it, and choose a template or start from scratch. [Screenshot placeholder]</p>
@@ -141,7 +141,7 @@ export default function Docs() {
             >
               <h3 className="text-2xl font-semibold mb-4 mt-12">Builder Guide</h3>
               <p>
-                The Flux Builder is your creative hub. Here’s how to use its core features to design and deploy your app.
+                The Morph Builder is your creative hub. Here’s how to use its core features to design and deploy your app.
               </p>
               <h4 className="text-xl font-medium mt-6 mb-2">Drag-and-Drop Interface</h4>
               <p>Add components by dragging them from the sidebar to the canvas. Adjust layouts in real-time. [Screenshot placeholder]</p>
@@ -161,11 +161,11 @@ export default function Docs() {
             >
               <h3 className="text-2xl font-semibold mb-4 mt-12">Support</h3>
               <p>
-                Need assistance? Flux offers multiple support channels to ensure your success.
+                Need assistance? Morph offers multiple support channels to ensure your success.
               </p>
               <ul className="list-disc pl-6 mt-4">
                 <li><Link href="/contact" className="text-blue-500 hover:underline">Contact Us</Link> for direct help.</li>
-                <li>Email us at <a href="mailto:support@flux.com" className="text-blue-500 hover:underline">support@flux.com</a>.</li>
+                <li>Email us at <a href="mailto:support@morph.com" className="text-blue-500 hover:underline">support@Morph.com</a>.</li>
                 <li>Join our <a href="#" className="text-blue-500 hover:underline">Community Forum</a> for peer support.</li>
               </ul>
             </motion.section>

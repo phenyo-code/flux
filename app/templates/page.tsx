@@ -182,7 +182,7 @@ export default function Templates() {
 
         {/* Additional Info Section */}
         <section className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
-          <h3 className="text-3xl font-bold text-gray-900 mb-6">Why Choose Flux Templates?</h3>
+          <h3 className="text-3xl font-bold text-gray-900 mb-6">Why Choose Morph Templates?</h3>
           <p className="text-gray-600 mb-8 max-w-2xl">
             Our templates are designed to save you time, inspire creativity, and deliver professional results. Each one is built with best practices in mind and can be tailored to your vision.
           </p>
@@ -209,7 +209,7 @@ export default function Templates() {
           <div className="mt-8">
             <h4 className="text-lg font-semibold text-gray-800 mb-4">How to Get Started</h4>
             <ul className="list-disc pl-6 text-gray-600 text-sm space-y-2">
-              <li>Click a template’s canvas to use it instantly in the Flux Builder.</li>
+              <li>Click a template’s canvas to use it instantly in the Morph Builder.</li>
               <li>Use the <FaEye className="inline mx-1" /> button to preview it live.</li>
               <li>Hover over <FaInfoCircle className="inline mx-1" /> for quick details like page count.</li>
             </ul>

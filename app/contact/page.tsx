@@ -101,7 +101,7 @@ export default function Contact() {
                   <FaEnvelope className="text-blue-600 text-2xl mt-1" />
                   <div>
                     <h3 className="text-lg font-medium text-gray-800">Email</h3>
-                    <p>support@flux.com</p>
+                    <p>support@morph.com</p>
                     <p className="text-sm text-gray-500">Expect a response within 24 hours.</p>
                   </div>
                 </li>
@@ -117,7 +117,7 @@ export default function Contact() {
                   <FaMapMarkerAlt className="text-blue-600 text-2xl mt-1" />
                   <div>
                     <h3 className="text-lg font-medium text-gray-800">Office</h3>
-                    <p>123 Flux Street</p>
+                    <p>123 morph Street</p>
                     <p>Tech City, USA 90210</p>
                   </div>
                 </li>
@@ -138,7 +138,7 @@ export default function Contact() {
                 <h3 className="text-lg font-medium text-gray-800 mb-4">Connect With Us</h3>
                 <div className="flex gap-4">
                   <a
-                    href="https://linkedin.com/company/flux"
+                    href="https://linkedin.com/company/morph"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 transition-colors"
@@ -146,7 +146,7 @@ export default function Contact() {
                     <FaLinkedin size={24} />
                   </a>
                   <a
-                    href="https://twitter.com/flux_team"
+                    href="https://twitter.com/morph_team"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 transition-colors"
