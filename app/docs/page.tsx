@@ -1,11 +1,18 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import Image from "next/image"; // Import Next Image
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaBars, FaTimes, FaHome, FaBook, FaTools, FaQuestionCircle, FaCode } from "react-icons/fa";
 
 export default function Docs() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false); // New state to track client-side rendering
+
+  // Set isClient to true only after mounting on the client
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const sidebarItems = [
     { href: "/", icon: <FaHome />, label: "Home" },
@@ -44,14 +51,20 @@ export default function Docs() {
           <motion.aside
             className="h-full w-64 p-6"
             initial="open"
-            animate={isSidebarOpen || window.innerWidth >= 1024 ? "open" : "closed"}
+            animate={isClient && (isSidebarOpen || window.innerWidth >= 1024) ? "open" : "closed"} // Check isClient
             variants={sidebarVariants}
           >
-            <h1 className="text-2xl font-bold mb-8">
-              <Link href="/" className="hover:text-blue-300 transition-colors">
-                Flux Docs
+            <div className="mb-8">
+              <Link href="/" className="flex items-center">
+                <Image
+                  src="/logo.png" // Replace with your actual logo path
+                  alt="Flux Logo"
+                  width={120} // Adjust width as needed
+                  height={40} // Adjust height as needed
+                  className="hover:opacity-80 transition-opacity"
+                />
               </Link>
-            </h1>
+            </div>
             <nav>
               <ul className="space-y-4">
                 {sidebarItems.map((item, index) => (
