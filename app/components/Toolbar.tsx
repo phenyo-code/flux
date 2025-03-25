@@ -14,10 +14,15 @@ import {
   FaEye,
   FaPlay,
   FaCube,
+  FaHome,
+  FaSyncAlt,
+  FaSave,
+  FaExpand,
 } from "react-icons/fa";
 import { saveDesignOrTemplate } from "@/app/actions/saveTemplate";
 import { useRouter } from "next/navigation";
 import { debounce } from "lodash";
+import Image from "next/image"; // Import Next Image
 
 export function Toolbar({
   canvasRef,
@@ -43,25 +48,25 @@ export function Toolbar({
     currentDesignId,
     setCurrentDesignId,
     addCustomComponent,
-    designTitle, // New: from store
-    setDesignTitle, // New: from store
+    designTitle,
+    setDesignTitle,
   } = useBuilderStore();
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [isPanningLocal, setIsPanningLocal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [componentName, setComponentName] = useState(""); // Kept for component save
+  const [componentName, setComponentName] = useState("");
   const router = useRouter();
 
   const isNewDesign = window.location.pathname === "/builder/design";
   const isNewTemplate = window.location.pathname === "/builder/template";
-  const saveAsDefault = isNewTemplate ? "template" : "design"; // Default based on route
+  const saveAsDefault = isNewTemplate ? "template" : "design";
 
-  // Debounced auto-save function for designs/templates
+  // Debounced auto-save function
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const autoSave = useCallback(
     debounce(async (pagesData: typeof pages, designId: string | null, title: string) => {
-      if (previewMode || componentBuilderMode) return; // Skip auto-save in preview or component mode
+      if (previewMode || componentBuilderMode) return;
 
       const urlDesignId = window.location.pathname.split("/")[2];
       const effectiveDesignId = designId || (urlDesignId !== "design" && urlDesignId !== "template" ? urlDesignId : null);
@@ -89,14 +94,12 @@ export function Toolbar({
     [previewMode, componentBuilderMode, saveAsDefault, currentDesignId, router, setCurrentDesignId]
   );
 
-  // Auto-save on pages or title change
   useEffect(() => {
     if (pages.length > 0 && !componentBuilderMode) {
       autoSave(pages, currentDesignId, designTitle || (saveAsDefault === "design" ? "Untitled Design" : "Untitled Template"));
     }
   }, [pages, designTitle, autoSave, currentDesignId, componentBuilderMode, saveAsDefault]);
 
-  // Manual save for components
   const handleSaveComponent = async () => {
     if (!componentName.trim()) {
       alert("Please enter a component name.");
@@ -218,26 +221,41 @@ export function Toolbar({
     if (previewMode) setPreviewMode(false);
   };
 
-  const handleLogoContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleLogoClick = (e: React.MouseEvent) => {
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
   const closeContextMenu = () => setContextMenu(null);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenu && e.target instanceof Element && !e.target.closest(".context-menu")) {
+        closeContextMenu();
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [contextMenu]);
+
   return (
     <div className="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md">
       <div className="flex items-center gap-4 relative">
-        <h1
-          className="text-xl font-bold cursor-pointer hover:text-blue-300 transition-colors"
-          onContextMenu={handleLogoContextMenu}
-          onClick={() => setContextMenu(null)}
+        <div
+          className="cursor-pointer"
+          onClick={handleLogoClick}
+          onContextMenu={handleLogoClick}
         >
-          Flux
-        </h1>
+          <Image
+            src="/logo.png" // Replace with your actual logo path
+            alt="Flux Logo"
+            width={30} // Adjust width as needed
+            height={15} // Adjust height as needed
+            className="hover:opacity-80 transition-opacity"
+          />
+        </div>
         {contextMenu && (
           <div
-            className="absolute bg-white text-gray-800 rounded shadow-lg p-2 z-50"
+            className="absolute bg-white text-gray-800 rounded-lg shadow-lg p-2 z-50 context-menu"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
             <button
@@ -245,35 +263,59 @@ export function Toolbar({
                 router.push("/projects");
                 closeContextMenu();
               }}
-              className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
             >
+              <FaHome className="text-blue-500" />
               Back to Projects
+            </button>
+            <button
+              onClick={() => {
+                autoSave.flush();
+                closeContextMenu();
+              }}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
+            >
+              <FaSave className="text-green-500" />
+              Save Now
             </button>
             <button
               onClick={() => {
                 handleFitToScreen();
                 closeContextMenu();
               }}
-              className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
             >
-              Reset View
+              <FaExpand className="text-purple-500" />
+              Fit to Screen
             </button>
             <button
               onClick={() => {
                 handleExport();
                 closeContextMenu();
               }}
-              className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
             >
+              <FaDownload className="text-gray-600" />
               Export Design
+            </button>
+            <button
+              onClick={() => {
+                handleShare();
+                closeContextMenu();
+              }}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
+            >
+              <FaShareAlt className="text-blue-600" />
+              Share Design
             </button>
             <button
               onClick={() => {
                 window.location.reload();
                 closeContextMenu();
               }}
-              className="block w-full text-left px-2 py-1 hover:bg-gray-100 rounded"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
             >
+              <FaSyncAlt className="text-orange-500" />
               Refresh
             </button>
           </div>
