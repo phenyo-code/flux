@@ -112,20 +112,18 @@ NEXTAUTH_URL=http://localhost:3000
 
 
 
-### Notes
+# Acknowledgements
 
-- **Structure**: Mirrors FLARE’s README with `<h1>` for the title, `<p>` tags for badges, emoji headers, and a tech table. I excluded the testing section since Jest isn’t in Morph’s `package.json`, and there’s no Stripe checkout, so I omitted that part.
-- **Badges**: Includes all relevant technologies from `package.json` (e.g., Next.js, Prisma, Socket.IO, Zustand) with shields.io badges, styled like FLARE’s.
-- **Features**: Tailored to a no-code website builder, emphasizing drag-and-drop (React DnD), real-time collaboration (Socket.IO), and animations (Framer Motion).
-- **Environment Variables**: Adapted from FLARE’s `.env` example, focusing on NextAuth.js and MongoDB, as they’re implied by the dependencies.
-- **Placeholders**: Replace `your-google-id`, `your-mongodb-connection-string`, etc., with your actual values.
-- **Assumptions**: Assumed Next.js 15 uses the app router (`app/page.js`). If Morph uses the pages router or has specific features, let me know to adjust.
+Next.js
+Prisma
+Tailwind CSS
+Socket.IO
+Framer Motion
+NextAuth.js
+Vercel Analytics
 
-### Next Steps
-- **Copy-Paste**: You can copy the above Markdown directly into your project’s `README.md` file.
-- **Customization**: If you want to add specific features, screenshots, or a live demo link, let me know.
-- **Profile README**: If you’re ready to update your GitHub profile README, share your current one or confirm if you want to use the earlier suggestion, and I’ll integrate Morph.
-- **Feedback**: If you need changes (e.g., more badges, different tone, or additional sections like testing), please specify.
+
+
 
 
 
