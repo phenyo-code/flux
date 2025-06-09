@@ -12,7 +12,7 @@
 
 ---
 
-### 🔧 Built with the tools and technologies:
+###  Built with the tools and technologies:
 
 <p>
   <img src="https://img.shields.io/badge/JSON-black?logo=json&style=for-the-badge" />
@@ -37,7 +37,7 @@
 
 ---
 
-## ✨ Features
+## Features
 
 - **Drag-and-Drop Builder** – Intuitive interface for creating websites without coding.
 - **Real-Time Collaboration** – Powered by Socket.IO for seamless team editing.
@@ -50,7 +50,7 @@
 
 ---
 
-## 📦 Technologies Used
+## Technologies Used
 
 | Category        | Technologies                                                                 |
 |----------------|-------------------------------------------------------------------------------|
