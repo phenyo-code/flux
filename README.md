@@ -77,12 +77,12 @@ yarn install
 pnpm install
 # or
 bun install
-'''
+```
 
 
 # Run the development server:
 
-'''bash
+```bash
 npm run dev
 # or
 yarn dev
@@ -90,4 +90,42 @@ yarn dev
 pnpm dev
 # or
 bun dev
-'''
+```
+
+Open http://localhost:3000 with your browser to see the result.
+
+You can start editing the page by modifying app/page.js. The page auto-updates as you edit the file.
+
+Set up the environment variables by creating a .env.local file at the root of the project:
+
+
+```bash
+GOOGLE_ID=your-google-id
+GOOGLE_SECRET=your-google-secret
+NODE_ENV=development
+COOKIE_SECRET=your-cookie-secret
+DATABASE_URL="your-mongodb-connection-string"
+NEXTAUTH_SECRET=your-nextauth-secret
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3000
+```
+
+
+
+### Notes
+
+- **Structure**: Mirrors FLARE’s README with `<h1>` for the title, `<p>` tags for badges, emoji headers, and a tech table. I excluded the testing section since Jest isn’t in Morph’s `package.json`, and there’s no Stripe checkout, so I omitted that part.
+- **Badges**: Includes all relevant technologies from `package.json` (e.g., Next.js, Prisma, Socket.IO, Zustand) with shields.io badges, styled like FLARE’s.
+- **Features**: Tailored to a no-code website builder, emphasizing drag-and-drop (React DnD), real-time collaboration (Socket.IO), and animations (Framer Motion).
+- **Environment Variables**: Adapted from FLARE’s `.env` example, focusing on NextAuth.js and MongoDB, as they’re implied by the dependencies.
+- **Placeholders**: Replace `your-google-id`, `your-mongodb-connection-string`, etc., with your actual values.
+- **Assumptions**: Assumed Next.js 15 uses the app router (`app/page.js`). If Morph uses the pages router or has specific features, let me know to adjust.
+
+### Next Steps
+- **Copy-Paste**: You can copy the above Markdown directly into your project’s `README.md` file.
+- **Customization**: If you want to add specific features, screenshots, or a live demo link, let me know.
+- **Profile README**: If you’re ready to update your GitHub profile README, share your current one or confirm if you want to use the earlier suggestion, and I’ll integrate Morph.
+- **Feedback**: If you need changes (e.g., more badges, different tone, or additional sections like testing), please specify.
+
+
+
